@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/app-actividades/tesis-backend.app-actividades.main.iml" filepath="$PROJECT_DIR$/.idea/modules/app-actividades/tesis-backend.app-actividades.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/app-filtrosBusqueda/tesis-backend.app-filtrosBusqueda.main.iml" filepath="$PROJECT_DIR$/.idea/modules/app-filtrosBusqueda/tesis-backend.app-filtrosBusqueda.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/app-opiniones/tesis-backend.app-opiniones.main.iml" filepath="$PROJECT_DIR$/.idea/modules/app-opiniones/tesis-backend.app-opiniones.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/app-usuarios/tesis-backend.app-usuarios.main.iml" filepath="$PROJECT_DIR$/.idea/modules/app-usuarios/tesis-backend.app-usuarios.main.iml" />
+    </modules>
+  </component>
+</project>

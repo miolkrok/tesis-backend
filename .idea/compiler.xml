@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile name="Gradle Imported" enabled="true">
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.projectlombok/lombok/1.18.32/17d46b3e205515e1e8efd3ee4d57ce8018914163/lombok-1.18.32.jar" />
+        </processorPath>
+        <module name="tesis-backend.app-usuarios.main" />
+        <module name="tesis-backend.app-filtrosBusqueda.main" />
+        <module name="tesis-backend.app-pagos.main" />
+        <module name="tesis-backend.app-notificaciones.main" />
+        <module name="tesis-backend.app-opiniones.main" />
+        <module name="tesis-backend.app-reservas.main" />
+        <module name="tesis-backend.app-actividades.main" />
+      </profile>
+      <profile name="Gradle Imported" enabled="true">
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.projectlombok/lombok/1.18.30/f195ee86e6c896ea47a1d39defbe20eb59cd149d/lombok-1.18.30.jar" />
+        </processorPath>
+        <module name="tesis-backend.app-actividades.test" />
+        <module name="tesis-backend.app-pagos.quarkus-test-generated-sources" />
+        <module name="tesis-backend.app-notificaciones.integrationTest" />
+        <module name="tesis-backend.app-actividades.quarkus-test-generated-sources" />
+        <module name="tesis-backend.app-actividades.integrationTest" />
+        <module name="tesis-backend.app-notificaciones.quarkus-test-generated-sources" />
+        <module name="tesis-backend.app-reservas.integrationTest" />
+        <module name="tesis-backend.app-reservas.quarkus-test-generated-sources" />
+        <module name="tesis-backend.app-notificaciones.quarkus-generated-sources" />
+        <module name="tesis-backend.app-notificaciones.native-test" />
+        <module name="tesis-backend.app-reservas.native-test" />
+        <module name="tesis-backend.app-pagos.native-test" />
+        <module name="tesis-backend.app-actividades.quarkus-generated-sources" />
+        <module name="tesis-backend.app-pagos.test" />
+        <module name="tesis-backend.app-notificaciones.test" />
+        <module name="tesis-backend.app-usuarios.native-test" />
+        <module name="tesis-backend.app-opiniones.integrationTest" />
+        <module name="tesis-backend.app-usuarios.quarkus-generated-sources" />
+        <module name="tesis-backend.app-actividades.native-test" />
+        <module name="tesis-backend.app-pagos.integrationTest" />
+        <module name="tesis-backend.app-filtrosBusqueda.native-test" />
+        <module name="tesis-backend.app-filtrosBusqueda.quarkus-generated-sources" />
+        <module name="tesis-backend.app-opiniones.native-test" />
+        <module name="tesis-backend.app-usuarios.quarkus-test-generated-sources" />
+        <module name="tesis-backend.app-usuarios.integrationTest" />
+        <module name="tesis-backend.app-filtrosBusqueda.test" />
+        <module name="tesis-backend.app-usuarios.test" />
+        <module name="tesis-backend.app-reservas.test" />
+        <module name="tesis-backend.app-reservas.quarkus-generated-sources" />
+        <module name="tesis-backend.app-opiniones.quarkus-test-generated-sources" />
+        <module name="tesis-backend.app-filtrosBusqueda.quarkus-test-generated-sources" />
+        <module name="tesis-backend.app-filtrosBusqueda.integrationTest" />
+        <module name="tesis-backend.app-opiniones.quarkus-generated-sources" />
+        <module name="tesis-backend.app-opiniones.test" />
+        <module name="tesis-backend.app-pagos.quarkus-generated-sources" />
+      </profile>
+    </annotationProcessing>
+    <bytecodeTargetLevel target="17" />
+  </component>
+</project>

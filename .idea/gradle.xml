@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="GradleMigrationSettings" migrationVersion="1" />
+  <component name="GradleSettings">
+    <option name="linkedExternalProjectsSettings">
+      <GradleProjectSettings>
+        <option name="externalProjectPath" value="$PROJECT_DIR$" />
+        <option name="gradleJvm" value="#JAVA_HOME" />
+        <option name="modules">
+          <set>
+            <option value="$PROJECT_DIR$" />
+            <option value="$PROJECT_DIR$/app-actividades" />
+            <option value="$PROJECT_DIR$/app-filtrosBusqueda" />
+            <option value="$PROJECT_DIR$/app-notificaciones" />
+            <option value="$PROJECT_DIR$/app-opiniones" />
+            <option value="$PROJECT_DIR$/app-pagos" />
+            <option value="$PROJECT_DIR$/app-reservas" />
+            <option value="$PROJECT_DIR$/app-usuarios" />
+          </set>
+        </option>
+      </GradleProjectSettings>
+    </option>
+  </component>
+</project>
