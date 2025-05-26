@@ -17,25 +17,18 @@ public class Usuario {
     @Column(name = "id", updatable = false, nullable = false)
     private Integer id;
 
-    @Column(name="nombre")
     private String nombre;
 
-    @Column(name="apellido")
     private String apellido;
 
-    @Column(name="email")
     private String email;
 
-    @Column(name="password")
     private String password;
 
-    @Column(name="telefono")
     private String telefono;
 
-    @Column(name="direccion")
     private String direccion;
 
-    @Column(name="rol")
     private String rol;
 
     @Column(name="fecha_creacion")
@@ -44,7 +37,14 @@ public class Usuario {
     @Column(name="fecha_actualizacion")
     private LocalDateTime fechaActualizacion;
 
-    @OneToOne(cascade = CascadeType.ALL)
+    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     @JoinColumn(name = "proveedor_id_usuario")
-    Proveedor proveedor;
+    private Proveedor proveedor;
+
+    public void setProveedor(Proveedor proveedor) {
+        this.proveedor = proveedor;
+        if (proveedor != null) {
+            proveedor.setUsuario(this);
+        }
+    }
 }

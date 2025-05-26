@@ -5,6 +5,7 @@ import com.distribuida.clients.UsuarioRestClient;
 import com.distribuida.db.Actividad;
 import com.distribuida.dtos.ActividadDTO;
 import com.distribuida.repo.ActividadRepository;
+import com.distribuida.repo.GaleriaRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -13,6 +14,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Path("/actividades")
@@ -43,7 +45,13 @@ public class ActividadRest {
                     dto.setDescripcion(actividad.getDescripcion());
                     dto.setUbicacion(actividad.getUbicacion());
                     dto.setPrecio(actividad.getPrecio());
-                    //dto.setNombreProveedor(proveedor.getNombre() + " " + proveedor.getApellido());
+                    dto.setDuracion(actividad.getDuracion());
+                    dto.setNivelDificultad(actividad.getNivelDificultad());
+                    dto.setTipoActividad(actividad.getTipoActividad());
+                    dto.setDisponibilidad(actividad.getDisponibilidad());
+                    dto.setFechaCreacion(LocalDateTime.now());
+                    dto.setFechaActualizacion(LocalDateTime.now());
+                    dto.setProveedorId(proveedor.getId());
 
                     return dto;
                 }).toList();
@@ -67,9 +75,13 @@ public class ActividadRest {
             dto.setDescripcion(actividad.getDescripcion());
             dto.setUbicacion(actividad.getUbicacion());
             dto.setPrecio(actividad.getPrecio());
-            //dto.setCategoria(actividad.getCategoria());
-            //dto.setCapacidad(actividad.getCapacidad());
-            //dto.setNombreProveedor(proveedor.getNombre() + " " + proveedor.getApellido());
+            dto.setDuracion(actividad.getDuracion());
+            dto.setNivelDificultad(actividad.getNivelDificultad());
+            dto.setTipoActividad(actividad.getTipoActividad());
+            dto.setDisponibilidad(actividad.getDisponibilidad());
+            dto.setFechaCreacion(LocalDateTime.now());
+            dto.setFechaActualizacion(LocalDateTime.now());
+            dto.setProveedorId(proveedor.getId());
 
             return Response.ok(dto).build();
         } catch (Exception e) {
@@ -94,9 +106,13 @@ public class ActividadRest {
         obj.setDescripcion(actividad.getDescripcion());
         obj.setUbicacion(actividad.getUbicacion());
         obj.setPrecio(actividad.getPrecio());
-        //obj.setCategoria(actividad.getCategoria());
-        //obj.setCapacidad(actividad.getCapacidad());
-        obj.setProveedorId(actividad.getProveedorId());
+        obj.setDuracion(actividad.getDuracion());
+        obj.setNivelDificultad(actividad.getNivelDificultad());
+        obj.setTipoActividad(actividad.getTipoActividad());
+        obj.setDisponibilidad(actividad.getDisponibilidad());
+        obj.setFechaCreacion(actividad.getFechaCreacion());
+        obj.setFechaActualizacion(LocalDateTime.now());
+        obj.setProveedorId(actividad.getId());
 
         return Response.ok().build();
     }
