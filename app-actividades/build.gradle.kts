@@ -18,7 +18,6 @@ dependencies {
     implementation("io.quarkus:quarkus-arc") //Implementacion de CDI de quarkus (Motor de comp de negocio)
     implementation("io.quarkus:quarkus-resteasy-reactive") //Motor de rest JAXRS en su forma reactiva
     implementation("io.quarkus:quarkus-resteasy-reactive-jackson") //JSON
-    implementation("com.vladmihalcea:hibernate-types-52:2.21.1") //JSON
     implementation("io.quarkus:quarkus-hibernate-orm-panache") //JPA Hibernate+ repo
 
     //REST CLIENT

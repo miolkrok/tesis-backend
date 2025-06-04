@@ -10,7 +10,6 @@ com.fasterxml:classmate::jar:1.7.0
 com.github.ben-manes.caffeine:caffeine::jar:3.1.5
 com.google.errorprone:error_prone_annotations::jar:2.27.1
 com.sun.istack:istack-commons-runtime::jar:4.1.2
-com.vladmihalcea:hibernate-types-52::jar:2.21.1
 io.agroal:agroal-api::jar:2.4
 io.agroal:agroal-narayana::jar:2.4
 io.agroal:agroal-pool::jar:2.4

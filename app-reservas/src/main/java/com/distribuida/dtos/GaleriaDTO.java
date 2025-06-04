@@ -7,5 +7,5 @@ public class GaleriaDTO {
 
     private Integer id;
     private String urlFoto;
-    private ActividadDTO actividad;
+    private Integer actividadId;
 }
