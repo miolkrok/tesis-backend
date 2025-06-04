@@ -34,7 +34,6 @@ public class ActividadDTO {
 
     private String duracion;
 
-    //@Type(JsonType.class)
     private String disponibilidad;
 
     private LocalDateTime fechaCreacion;
@@ -42,4 +41,6 @@ public class ActividadDTO {
     private LocalDateTime fechaActualizacion;
 
     private List<GaleriaDTO> galeria;
+
+    private List<ServicioEventoDTO> servicioEvento;
 }

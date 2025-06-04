@@ -3,6 +3,7 @@ package com.distribuida.rest;
 import com.distribuida.db.Actividad;
 import com.distribuida.db.Galeria;
 import com.distribuida.db.ServicioEvento;
+import com.distribuida.repo.ActividadRepository;
 import com.distribuida.repo.ServicioEventoRepository;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
@@ -15,16 +16,19 @@ public class ServicioEventoRest {
     @Inject
     private ServicioEventoRepository servicioEventoRepo;
 
+    @Inject
+    private ActividadRepository actividadRepo;
+
     @GET
     public List<ServicioEvento> findAll() {
-        System.out.println("findAll imagenes");
+        System.out.println("findAll servicios evento");
         return servicioEventoRepo.listAll();
     }
 
     @GET
     @Path("/{id}")
     public Response findById(@PathParam("id") Integer id) {
-        System.out.println("findById imagen: " + id);
+        System.out.println("findById servicio evento: " + id);
         var op = servicioEventoRepo.findByIdOptional(id);
         if (op.isEmpty()) {
             return Response.status(Response.Status.NOT_FOUND).build();
@@ -35,8 +39,8 @@ public class ServicioEventoRest {
     @GET
     @Path("/actividad/{actividadId}")
     public Response findByActividadId(@PathParam("actividadId") Integer actividadId) {
-        System.out.println("findByActividadId: " + actividadId);
-        List<ServicioEvento> servicios = servicioEventoRepo.list("actividad.id", actividadId);
+        System.out.println("findByActividadId servicios: " + actividadId);
+        List<ServicioEvento> servicios = servicioEventoRepo.list("actividadServicio.id", actividadId);
         return Response.ok(servicios).build();
     }
 
@@ -47,7 +51,7 @@ public class ServicioEventoRest {
 
             // Validar que la actividad existe
             if (servicioEvento.getActividadServicio() != null && servicioEvento.getActividadServicio().getId() != null) {
-                Actividad actividad = servicioEventoRepo.findById(servicioEvento.getActividadServicio().getId());
+                Actividad actividad = actividadRepo.findById(servicioEvento.getActividadServicio().getId());
                 if (actividad == null) {
                     return Response.status(Response.Status.BAD_REQUEST)
                             .entity("La actividad especificada no existe").build();
@@ -56,13 +60,13 @@ public class ServicioEventoRest {
             }
 
             servicioEventoRepo.persist(servicioEvento);
-            System.out.println("Imagen creada exitosamente con ID: " + servicioEvento.getId());
+            System.out.println("Servicio evento creado exitosamente con ID: " + servicioEvento.getId());
             return Response.status(Response.Status.CREATED).entity(servicioEvento).build();
         } catch (Exception e) {
-            System.err.println("Error al crear imagen: " + e.getMessage());
+            System.err.println("Error al crear servicio evento: " + e.getMessage());
             e.printStackTrace();
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity("Error al crear imagen: " + e.getMessage()).build();
+                    .entity("Error al crear servicio evento: " + e.getMessage()).build();
         }
     }
 
@@ -79,7 +83,7 @@ public class ServicioEventoRest {
 
             // Actualizar actividad si se proporciona
             if (servicioEvento.getActividadServicio() != null && servicioEvento.getActividadServicio().getId() != null) {
-                Actividad actividad = servicioEventoRepo.findById(servicioEvento.getActividadServicio().getId());
+                Actividad actividad = actividadRepo.findById(servicioEvento.getActividadServicio().getId());
                 if (actividad != null) {
                     obj.setActividadServicio(actividad);
                 }
@@ -87,7 +91,7 @@ public class ServicioEventoRest {
 
             return Response.ok(obj).build();
         } catch (Exception e) {
-            System.err.println("Error al actualizar imagen: " + e.getMessage());
+            System.err.println("Error al actualizar servicio evento: " + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
         }
     }
@@ -102,7 +106,7 @@ public class ServicioEventoRest {
             }
             return Response.ok().build();
         } catch (Exception e) {
-            System.err.println("Error al eliminar imagen: " + e.getMessage());
+            System.err.println("Error al eliminar servicio evento: " + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
         }
     }

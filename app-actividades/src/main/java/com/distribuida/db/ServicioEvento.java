@@ -18,6 +18,6 @@ public class ServicioEvento {
     private String listaServicio;
 
     @ManyToOne
-    @JoinColumn(name = "acti_id")
+    @JoinColumn(name = "acti_id_servicio")
     private Actividad actividadServicio;
 }

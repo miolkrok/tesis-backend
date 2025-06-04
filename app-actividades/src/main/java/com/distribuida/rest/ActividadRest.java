@@ -1,13 +1,13 @@
 package com.distribuida.rest;
 
-import com.distribuida.clients.ReservaRestClient;
 import com.distribuida.clients.UsuarioRestClient;
 import com.distribuida.db.Actividad;
 import com.distribuida.db.Galeria;
+import com.distribuida.db.ServicioEvento;
 import com.distribuida.dtos.ActividadDTO;
 import com.distribuida.dtos.GaleriaDTO;
+import com.distribuida.dtos.ServicioEventoDTO;
 import com.distribuida.repo.ActividadRepository;
-import com.distribuida.repo.GaleriaRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -81,6 +81,14 @@ public class ActividadRest {
                 for (Galeria galeria : actividad.getGaleria()) {
                     galeria.setId(null);
                     galeria.setActividad(actividad);
+                }
+            }
+
+            // Manejar servicios evento si existe
+            if (actividad.getServicioEvento() != null) {
+                for (ServicioEvento servicio : actividad.getServicioEvento()) {
+                    servicio.setId(null);
+                    servicio.setActividadServicio(actividad);
                 }
             }
 
@@ -170,6 +178,14 @@ public class ActividadRest {
             dto.setGaleria(galeriaDTO);
         }
 
+        // Convertir servicios evento
+        if (actividad.getServicioEvento() != null) {
+            List<ServicioEventoDTO> serviciosDTO = actividad.getServicioEvento().stream()
+                    .map(this::convertServicioEventoToDTO)
+                    .collect(Collectors.toList());
+            dto.setServicioEvento(serviciosDTO);
+        }
+
         return dto;
     }
 
@@ -199,8 +215,18 @@ public class ActividadRest {
         GaleriaDTO dto = new GaleriaDTO();
         dto.setId(galeria.getId());
         dto.setUrlFoto(galeria.getUrlFoto());
-        // No incluir la actividad para evitar referencia circular
+        dto.setActividadId(galeria.getActividad().getId());
         return dto;
     }
+
+    // Método auxiliar para convertir ServicioEvento a ServicioEventoDTO
+    private ServicioEventoDTO convertServicioEventoToDTO(ServicioEvento servicioEvento) {
+        ServicioEventoDTO dto = new ServicioEventoDTO();
+        dto.setId(servicioEvento.getId());
+        dto.setListaServicio(servicioEvento.getListaServicio());
+        dto.setActividadId(servicioEvento.getActividadServicio().getId());
+        return dto;
+    }
+
 }
 

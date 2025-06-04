@@ -40,7 +40,6 @@ public class Actividad {
 
     private String duracion;
 
-    //@Type(JsonType.class)
     private String disponibilidad;
 
     @Column(name="fecha_creacion")
