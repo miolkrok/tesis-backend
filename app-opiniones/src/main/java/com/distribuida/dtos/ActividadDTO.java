@@ -17,7 +17,9 @@ public class ActividadDTO {
 
     private String descripcion;
 
-    private String ubicacion;
+    private String ubicacionDestino;
+
+    private String ubicacionSalida;
 
     private String tipoActividad;
 

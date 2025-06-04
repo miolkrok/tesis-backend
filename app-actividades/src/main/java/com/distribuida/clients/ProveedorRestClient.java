@@ -17,4 +17,18 @@ public interface  ProveedorRestClient {
     @GET
     @Path("/{id}")
     ProveedorDto findById(@PathParam("id") Integer id);
+
+    @GET
+    java.util.List<ProveedorDto> findAll();
+
+    @POST
+    ProveedorDto create(ProveedorDto proveedor);
+
+    @PUT
+    @Path("/{id}")
+    ProveedorDto update(@PathParam("id") Integer id, ProveedorDto proveedor);
+
+    @DELETE
+    @Path("/{id}")
+    void delete(@PathParam("id") Integer id);
 }

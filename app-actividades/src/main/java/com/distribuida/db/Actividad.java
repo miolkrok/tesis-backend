@@ -24,7 +24,11 @@ public class Actividad {
 
     private String descripcion;
 
-    private String ubicacion;
+    @Column(name="ubicacion_destino")
+    private String ubicacionDestino;
+
+    @Column(name="ubicacion_salida")
+    private String ubicacionSalida;
 
     @Column(name="tipo_actividad")
     private String tipoActividad;
@@ -47,6 +51,9 @@ public class Actividad {
 
     @OneToMany(mappedBy = "actividad", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Galeria> galeria;
+
+    @OneToMany(mappedBy = "actividadServicio", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<ServicioEvento> servicioEvento;
 
 
 

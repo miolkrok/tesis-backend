@@ -3,7 +3,9 @@ package com.distribuida.rest;
 import com.distribuida.clients.ReservaRestClient;
 import com.distribuida.clients.UsuarioRestClient;
 import com.distribuida.db.Actividad;
+import com.distribuida.db.Galeria;
 import com.distribuida.dtos.ActividadDTO;
+import com.distribuida.dtos.GaleriaDTO;
 import com.distribuida.repo.ActividadRepository;
 import com.distribuida.repo.GaleriaRepository;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -16,6 +18,7 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Path("/actividades")
 @Produces(MediaType.APPLICATION_JSON)
@@ -36,25 +39,8 @@ public class ActividadRest {
         var actividades = actividadRepo.listAll();
 
         return actividades.stream()
-                .map(actividad -> {
-                    var proveedor = usuarioRestClient.findById(actividad.getProveedorId());
-
-                    ActividadDTO dto = new ActividadDTO();
-                    dto.setId(actividad.getId());
-                    dto.setTitulo(actividad.getTitulo());
-                    dto.setDescripcion(actividad.getDescripcion());
-                    dto.setUbicacion(actividad.getUbicacion());
-                    dto.setPrecio(actividad.getPrecio());
-                    dto.setDuracion(actividad.getDuracion());
-                    dto.setNivelDificultad(actividad.getNivelDificultad());
-                    dto.setTipoActividad(actividad.getTipoActividad());
-                    dto.setDisponibilidad(actividad.getDisponibilidad());
-                    dto.setFechaCreacion(LocalDateTime.now());
-                    dto.setFechaActualizacion(LocalDateTime.now());
-                    dto.setProveedorId(proveedor.getId());
-
-                    return dto;
-                }).toList();
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
     }
 
     @GET
@@ -67,61 +53,154 @@ public class ActividadRest {
 
         Actividad actividad = op.get();
         try {
-            var proveedor = usuarioRestClient.findById(actividad.getProveedorId());
-
-            ActividadDTO dto = new ActividadDTO();
-            dto.setId(actividad.getId());
-            dto.setTitulo(actividad.getTitulo());
-            dto.setDescripcion(actividad.getDescripcion());
-            dto.setUbicacion(actividad.getUbicacion());
-            dto.setPrecio(actividad.getPrecio());
-            dto.setDuracion(actividad.getDuracion());
-            dto.setNivelDificultad(actividad.getNivelDificultad());
-            dto.setTipoActividad(actividad.getTipoActividad());
-            dto.setDisponibilidad(actividad.getDisponibilidad());
-            dto.setFechaCreacion(LocalDateTime.now());
-            dto.setFechaActualizacion(LocalDateTime.now());
-            dto.setProveedorId(proveedor.getId());
-
+            ActividadDTO dto = convertToDTO(actividad);
             return Response.ok(dto).build();
         } catch (Exception e) {
-            // Si no se puede obtener la información del proveedor, devolver la actividad sin esa info
-            return Response.ok(actividad).build();
+            System.err.println("Error al obtener información del usuario/proveedor: " + e.getMessage());
+            // Si no se puede obtener la información del proveedor, devolver DTO básico
+            ActividadDTO dto = convertToDTOBasic(actividad);
+            return Response.ok(dto).build();
         }
     }
 
     @POST
     public Response create(Actividad actividad) {
-        actividad.setId(null);
-        actividadRepo.persist(actividad);
-        return Response.status(Response.Status.CREATED).build();
+        try {
+            actividad.setId(null);
+
+            // Establecer fechas automáticamente
+            if (actividad.getFechaCreacion() == null) {
+                actividad.setFechaCreacion(LocalDateTime.now());
+            }
+            if (actividad.getFechaActualizacion() == null) {
+                actividad.setFechaActualizacion(LocalDateTime.now());
+            }
+
+            // Manejar galería si existe
+            if (actividad.getGaleria() != null) {
+                for (Galeria galeria : actividad.getGaleria()) {
+                    galeria.setId(null);
+                    galeria.setActividad(actividad);
+                }
+            }
+
+            actividadRepo.persist(actividad);
+            System.out.println("Actividad creada exitosamente con ID: " + actividad.getId());
+
+            return Response.status(Response.Status.CREATED).entity(actividad).build();
+        } catch (Exception e) {
+            System.err.println("Error al crear actividad: " + e.getMessage());
+            e.printStackTrace();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity("Error al crear actividad: " + e.getMessage()).build();
+        }
     }
 
     @PUT
     @Path("/{id}")
     public Response update(@PathParam("id") Integer id, Actividad actividad) {
-        Actividad obj = actividadRepo.findById(id);
+        try {
+            Actividad obj = actividadRepo.findById(id);
+            if (obj == null) {
+                return Response.status(Response.Status.NOT_FOUND).build();
+            }
 
-        obj.setTitulo(actividad.getTitulo());
-        obj.setDescripcion(actividad.getDescripcion());
-        obj.setUbicacion(actividad.getUbicacion());
-        obj.setPrecio(actividad.getPrecio());
-        obj.setDuracion(actividad.getDuracion());
-        obj.setNivelDificultad(actividad.getNivelDificultad());
-        obj.setTipoActividad(actividad.getTipoActividad());
-        obj.setDisponibilidad(actividad.getDisponibilidad());
-        obj.setFechaCreacion(actividad.getFechaCreacion());
-        obj.setFechaActualizacion(LocalDateTime.now());
-        obj.setProveedorId(actividad.getId());
+            obj.setTitulo(actividad.getTitulo());
+            obj.setDescripcion(actividad.getDescripcion());
+            obj.setUbicacionDestino(actividad.getUbicacionDestino());
+            obj.setUbicacionSalida(actividad.getUbicacionSalida());
+            obj.setPrecio(actividad.getPrecio());
+            obj.setDuracion(actividad.getDuracion());
+            obj.setNivelDificultad(actividad.getNivelDificultad());
+            obj.setTipoActividad(actividad.getTipoActividad());
+            obj.setDisponibilidad(actividad.getDisponibilidad());
+            obj.setFechaActualizacion(LocalDateTime.now());
 
-        return Response.ok().build();
+            // CORRECCIÓN: No cambies el proveedorId por actividad.getId()!
+            if (actividad.getProveedorId() != null) {
+                obj.setProveedorId(actividad.getProveedorId());
+            }
+
+            return Response.ok(obj).build();
+        } catch (Exception e) {
+            System.err.println("Error al actualizar actividad: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     @DELETE
     @Path("/{id}")
     public Response delete(@PathParam("id") Integer id) {
-        actividadRepo.deleteById(id);
-        return Response.ok().build();
+        try {
+            boolean deleted = actividadRepo.deleteById(id);
+            if (!deleted) {
+                return Response.status(Response.Status.NOT_FOUND).build();
+            }
+            return Response.ok().build();
+        } catch (Exception e) {
+            System.err.println("Error al eliminar actividad: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    // Método auxiliar para convertir Actividad a ActividadDTO con información completa
+    private ActividadDTO convertToDTO(Actividad actividad) {
+        ActividadDTO dto = new ActividadDTO();
+
+        // Mapear campos básicos
+        dto.setId(actividad.getId());
+        dto.setProveedorId(actividad.getProveedorId());
+        dto.setTitulo(actividad.getTitulo());
+        dto.setDescripcion(actividad.getDescripcion());
+        dto.setUbicacionDestino(actividad.getUbicacionDestino());
+        dto.setUbicacionSalida(actividad.getUbicacionSalida());
+        dto.setTipoActividad(actividad.getTipoActividad());
+        dto.setNivelDificultad(actividad.getNivelDificultad());
+        dto.setPrecio(actividad.getPrecio());
+        dto.setDuracion(actividad.getDuracion());
+        dto.setDisponibilidad(actividad.getDisponibilidad());
+        dto.setFechaCreacion(actividad.getFechaCreacion());
+        dto.setFechaActualizacion(actividad.getFechaActualizacion());
+
+        // Convertir galería
+        if (actividad.getGaleria() != null) {
+            List<GaleriaDTO> galeriaDTO = actividad.getGaleria().stream()
+                    .map(this::convertGaleriaToDTO)
+                    .collect(Collectors.toList());
+            dto.setGaleria(galeriaDTO);
+        }
+
+        return dto;
+    }
+
+    // Método auxiliar para convertir sin llamadas externas
+    private ActividadDTO convertToDTOBasic(Actividad actividad) {
+        ActividadDTO dto = new ActividadDTO();
+
+        dto.setId(actividad.getId());
+        dto.setProveedorId(actividad.getProveedorId());
+        dto.setTitulo(actividad.getTitulo());
+        dto.setDescripcion(actividad.getDescripcion());
+        dto.setUbicacionDestino(actividad.getUbicacionDestino());
+        dto.setUbicacionSalida(actividad.getUbicacionSalida());
+        dto.setTipoActividad(actividad.getTipoActividad());
+        dto.setNivelDificultad(actividad.getNivelDificultad());
+        dto.setPrecio(actividad.getPrecio());
+        dto.setDuracion(actividad.getDuracion());
+        dto.setDisponibilidad(actividad.getDisponibilidad());
+        dto.setFechaCreacion(actividad.getFechaCreacion());
+        dto.setFechaActualizacion(actividad.getFechaActualizacion());
+
+        return dto;
+    }
+
+    // Método auxiliar para convertir Galeria a GaleriaDTO
+    private GaleriaDTO convertGaleriaToDTO(Galeria galeria) {
+        GaleriaDTO dto = new GaleriaDTO();
+        dto.setId(galeria.getId());
+        dto.setUrlFoto(galeria.getUrlFoto());
+        // No incluir la actividad para evitar referencia circular
+        return dto;
     }
 }
 
