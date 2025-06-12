@@ -8,7 +8,7 @@ import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
 @Path("/reservas")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
-@RegisterRestClient(baseUri = "stork://reservas-service")
+@RegisterRestClient(configKey = "ReservaRestClient")
 public interface ReservaRestClient {
 
     @GET

@@ -19,9 +19,6 @@ public class Proveedor {
     @Column(name="descripcion_empresa")
     private String descripcionEmpresa;
 
-    @Column(name="logo_empresa")
-    private String logoEmpresa;
-
     @Column(name="metodo_pago")
     private String metodoPago;
 

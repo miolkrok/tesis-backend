@@ -8,7 +8,7 @@ import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
 @Path("/opiniones")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
-@RegisterRestClient(baseUri = "stork://opiniones-service")
+@RegisterRestClient(configKey = "OpinionRestClient")
 public interface OpinionRestClient {
     @GET
     @Path("/promedio/actividad/{actividadId}")

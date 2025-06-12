@@ -125,8 +125,8 @@ public class ActividadRest {
             obj.setFechaActualizacion(LocalDateTime.now());
 
             // CORRECCIÓN: No cambies el proveedorId por actividad.getId()!
-            if (actividad.getProveedorId() != null) {
-                obj.setProveedorId(actividad.getProveedorId());
+            if (actividad.getUsuarioId() != null) {
+                obj.setUsuarioId(actividad.getUsuarioId());
             }
 
             return Response.ok(obj).build();
@@ -157,7 +157,7 @@ public class ActividadRest {
 
         // Mapear campos básicos
         dto.setId(actividad.getId());
-        dto.setProveedorId(actividad.getProveedorId());
+        dto.setProveedorId(actividad.getUsuarioId());
         dto.setTitulo(actividad.getTitulo());
         dto.setDescripcion(actividad.getDescripcion());
         dto.setUbicacionDestino(actividad.getUbicacionDestino());
@@ -194,7 +194,7 @@ public class ActividadRest {
         ActividadDTO dto = new ActividadDTO();
 
         dto.setId(actividad.getId());
-        dto.setProveedorId(actividad.getProveedorId());
+        dto.setProveedorId(actividad.getUsuarioId());
         dto.setTitulo(actividad.getTitulo());
         dto.setDescripcion(actividad.getDescripcion());
         dto.setUbicacionDestino(actividad.getUbicacionDestino());

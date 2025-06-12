@@ -8,7 +8,7 @@ import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
 @Path("/actividades")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
-@RegisterRestClient(baseUri = "stork://actividades-service")
+@RegisterRestClient(configKey = "ActividadRestClient")
 public interface ActividadRestClient {
     @GET
     @Path("/{id}")

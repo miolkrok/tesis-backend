@@ -15,6 +15,8 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Path("/opiniones")
 @Produces(MediaType.APPLICATION_JSON)
@@ -24,7 +26,7 @@ import java.util.List;
 public class OpinionRest {
 
     @Inject
-    private OpinionRepository opinonRepo;
+    private OpinionRepository opinionRepo;
 
     @Inject
     @RestClient
@@ -36,93 +38,61 @@ public class OpinionRest {
 
     @GET
     public List<OpinionDTO> findAll() {
-        var opiniones = opinonRepo.listAll();
+        var opiniones = opinionRepo.listAll();
 
         return opiniones.stream()
-                .map(opinion -> {
-                    try {
-                        var usuario = usuarioRestClient.findById(resena.getUsuarioId());
-                        var actividad = actividadRestClient.findById(resena.getActividadId());
-
-                        OpinionDTO dto = new OpinionDTO();
-                        dto.setId(opinion.getId());
-                        dto.setUsuarioId(opinion.getUsuarioId());
-                        dto.setActividadId(opinion.getActividadId());
-                        //dto.setPuntuacion(opinion.getPuntuacion());
-                        dto.setComentario(opinion.getComentario());
-                        dto.setFechaCreacion(opinion.getFechaCreacion());
-
-                        // Información enriquecida desde otros servicios
-                        //dto.setNombreUsuario(usuario.getNombre() + " " + usuario.getApellido());
-                        //dto.setTituloActividad(actividad.getTitulo());
-
-                        return dto;
-                    } catch (Exception e) {
-                        OpinionDTO dto = new OpinionDTO();
-                        dto.setId(opinion.getId());
-                        dto.setUsuarioId(opinion.getUsuarioId());
-                        dto.setActividadId(opinion.getActividadId());
-                        //dto.setPuntuacion(opinion.getPuntuacion());
-                        dto.setComentario(opinion.getComentario());
-                        dto.setFechaCreacion(opinion.getFechaCreacion());
-
-                        return dto;
-                    }
-                }).toList();
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
     }
 
     @GET
     @Path("/{id}")
     public Response findById(@PathParam("id") Integer id) {
-        System.out.println("findById");
-        var op = opinonRepo.findByIdOptional(id);
+        System.out.println("findById opinion: " + id);
+        var op = opinionRepo.findByIdOptional(id);
         if (op.isEmpty()) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
 
         Opinion opinion = op.get();
         try {
-            var usuario = usuarioRestClient.findById(opinion.getUsuarioId());
-            var actividad = actividadRestClient.findById(opinion.getActividadId());
-
-            OpinionDTO dto = new OpinionDTO();
-            dto.setId(opinion.getId());
-            dto.setUsuarioId(opinion.getUsuarioId());
-            dto.setActividadId(opinion.getActividadId());
-            //dto.setPuntuacion(opinion.getPuntuacion());
-            dto.setComentario(opinion.getComentario());
-            dto.setFechaCreacion(opinion.getFechaCreacion());
-            //dto.setNombreUsuario(usuario.getNombre() + " " + usuario.getApellido());
-            //dto.setTituloActividad(actividad.getTitulo());
-
+            OpinionDTO dto = convertToDTO(opinion);
             return Response.ok(dto).build();
         } catch (Exception e) {
-            return Response.ok(opinion).build();
+            System.err.println("Error al obtener información relacionada: " + e.getMessage());
+            return Response.ok(convertToDTOBasic(opinion)).build();
         }
     }
 
     @POST
     public Response create(Opinion opinion) {
-        // Validar que exista el usuario y la actividad
         try {
-            usuarioRestClient.findById(opinion.getUsuarioId());
-            actividadRestClient.findById(opinion.getActividadId());
+            // Validar que exista el usuario y la actividad
+            usuarioRestClient.findById(Integer.valueOf(opinion.getUsuarioId()));
+            actividadRestClient.findById(Integer.valueOf(opinion.getActividadId()));
 
-            // Validar la puntuación
-            /*if (opinion.getPuntuacion() < 1 || opinion.getPuntuacion() > 5) {
+            // Validar la calificación
+            if (opinion.getCalificacion() < 1 || opinion.getCalificacion() > 5) {
                 return Response.status(Response.Status.BAD_REQUEST)
-                        .entity("Error: La puntuación debe estar entre 1 y 5").build();
-            }*/
+                        .entity("Error: La calificación debe estar entre 1 y 5").build();
+            }
 
-            // Establecer fecha actual si no se proporcionó
+            // Establecer fechas automáticamente
             if (opinion.getFechaCreacion() == null) {
                 opinion.setFechaCreacion(LocalDateTime.now());
             }
+            if (opinion.getFechaActualizacion() == null) {
+                opinion.setFechaActualizacion(LocalDateTime.now());
+            }
 
             opinion.setId(null);
-            opinonRepo.persist(opinion);
-            return Response.status(Response.Status.CREATED).build();
+            opinionRepo.persist(opinion);
+
+            System.out.println("Opinión creada exitosamente con ID: " + opinion.getId());
+            return Response.status(Response.Status.CREATED).entity(convertToDTO(opinion)).build();
+
         } catch (Exception e) {
+            System.err.println("Error al crear opinión: " + e.getMessage());
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("Error: Usuario o Actividad no encontrados").build();
         }
@@ -131,117 +101,120 @@ public class OpinionRest {
     @PUT
     @Path("/{id}")
     public Response update(@PathParam("id") Integer id, Opinion opinion) {
-        Opinion obj = opinonRepo.findById(id);
+        try {
+            Opinion obj = opinionRepo.findById(id);
+            if (obj == null) {
+                return Response.status(Response.Status.NOT_FOUND).build();
+            }
 
-        // Solo se permite actualizar puntuación y comentario
-        //obj.setPuntuacion(opinion.getPuntuacion());
-        obj.setComentario(opinion.getComentario());
+            // Solo se permite actualizar calificación y comentario
+            if (opinion.getCalificacion() != null) {
+                if (opinion.getCalificacion() < 1 || opinion.getCalificacion() > 5) {
+                    return Response.status(Response.Status.BAD_REQUEST)
+                            .entity("Error: La calificación debe estar entre 1 y 5").build();
+                }
+                obj.setCalificacion(opinion.getCalificacion());
+            }
 
-        return Response.ok().build();
+            if (opinion.getComentario() != null) {
+                obj.setComentario(opinion.getComentario());
+            }
+
+            obj.setFechaActualizacion(LocalDateTime.now());
+
+            return Response.ok(convertToDTO(obj)).build();
+        } catch (Exception e) {
+            System.err.println("Error al actualizar opinión: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     @DELETE
     @Path("/{id}")
     public Response delete(@PathParam("id") Integer id) {
-        opinonRepo.deleteById(id);
-        return Response.ok().build();
+        try {
+            boolean deleted = opinionRepo.deleteById(id);
+            if (!deleted) {
+                return Response.status(Response.Status.NOT_FOUND).build();
+            }
+            return Response.ok().build();
+        } catch (Exception e) {
+            System.err.println("Error al eliminar opinión: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     @GET
     @Path("/usuario/{usuarioId}")
-    public List<OpinionDTO> findByUsuario(@PathParam("usuarioId") Integer usuarioId) {
-        var resenas = opinonRepo.find("usuarioId", usuarioId).list();
-
-        return resenas.stream()
-                .map(resena -> {
-                    try {
-                        var usuario = usuarioRestClient.findById(resena.getUsuarioId());
-                        var actividad = actividadRestClient.findById(resena.getActividadId());
-
-                        OpinionDTO dto = new OpinionDTO();
-                        dto.setId(resena.getId());
-                        dto.setUsuarioId(resena.getUsuarioId());
-                        dto.setActividadId(resena.getActividadId());
-                        //dto.setPuntuacion(resena.getPuntuacion());
-                        dto.setComentario(resena.getComentario());
-                        dto.setFechaCreacion(resena.getFechaCreacion());
-                        //dto.setNombreUsuario(usuario.getNombre() + " " + usuario.getApellido());
-                        //dto.setTituloActividad(actividad.getTitulo());
-
-                        return dto;
-                    } catch (Exception e) {
-                        OpinionDTO dto = new OpinionDTO();
-                        dto.setId(resena.getId());
-                        dto.setUsuarioId(resena.getUsuarioId());
-                        dto.setActividadId(resena.getActividadId());
-                        //dto.setPuntuacion(resena.getPuntuacion());
-                        dto.setComentario(resena.getComentario());
-                        dto.setFechaCreacion(resena.getFechaCreacion());
-
-                        return dto;
-                    }
-                    }).toList();
+    public List<OpinionDTO> findByUsuario(@PathParam("usuarioId") String usuarioId) {
+        var opiniones = opinionRepo.find("usuarioId", usuarioId).list();
+        return opiniones.stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
     }
 
     @GET
     @Path("/actividad/{actividadId}")
-    public List<OpinionDTO> findByActividad(@PathParam("actividadId") Integer actividadId) {
-        var resenas = opinonRepo.find("actividadId", actividadId).list();
-
-        return resenas.stream()
-                .map(resena -> {
-                    try {
-                        var usuario = usuarioRestClient.findById(resena.getUsuarioId());
-                        var actividad = actividadRestClient.findById(resena.getActividadId());
-
-                        OpinionDTO dto = new OpinionDTO();
-                        dto.setId(resena.getId());
-                        dto.setUsuarioId(resena.getUsuarioId());
-                        dto.setActividadId(resena.getActividadId());
-                        //dto.setPuntuacion(resena.getPuntuacion());
-                        dto.setComentario(resena.getComentario());
-                        dto.setFechaCreacion(resena.getFechaCreacion());
-                        //dto.setNombreUsuario(usuario.getNombre() + " " + usuario.getApellido());
-                        //dto.setTituloActividad(actividad.getTitulo());
-
-                        return dto;
-                    } catch (Exception e) {
-                        OpinionDTO dto = new OpinionDTO();
-                        dto.setId(resena.getId());
-                        dto.setUsuarioId(resena.getUsuarioId());
-                        dto.setActividadId(resena.getActividadId());
-                        //dto.setPuntuacion(resena.getPuntuacion());
-                        dto.setComentario(resena.getComentario());
-                        dto.setFechaCreacion(resena.getFechaCreacion());
-
-                        return dto;
-                    }
-                }).toList();
+    public List<OpinionDTO> findByActividad(@PathParam("actividadId") String actividadId) {
+        var opiniones = opinionRepo.find("actividadId", actividadId).list();
+        return opiniones.stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
     }
 
     @GET
     @Path("/promedio/actividad/{actividadId}")
     public Response getPromedioPuntuacion(@PathParam("actividadId") Integer actividadId) {
-        //var opiniones = opinonRepo.find("actividadId", actividadId).list();
+        var opiniones = opinionRepo.find("actividadId", actividadId.toString()).list();
 
-        /*if (opiniones.isEmpty()) {
+        if (opiniones.isEmpty()) {
             return Response.ok(Map.of(
                     "actividadId", actividadId,
-                    "promedioPuntuacion", 0,
-                    "totalResenas", 0
+                    "promedioPuntuacion", 0.0,
+                    "totalOpiniones", 0
             )).build();
         }
 
         double promedio = opiniones.stream()
-                .mapToInt(Opinion::getPuntuacion)
+                .mapToInt(Opinion::getCalificacion)
                 .average()
-                .orElse(0);
+                .orElse(0.0);
 
         return Response.ok(Map.of(
                 "actividadId", actividadId,
-                "promedioPuntuacion", promedio,
-                "totalResenas", resenas.size()
-        )).build();*/
-        return null;
+                "promedioPuntuacion", Math.round(promedio * 100.0) / 100.0, // Redondear a 2 decimales
+                "totalOpiniones", opiniones.size()
+        )).build();
+    }
+
+    // Métodos auxiliares de conversión
+    private OpinionDTO convertToDTO(Opinion opinion) {
+        OpinionDTO dto = new OpinionDTO();
+        dto.setId(opinion.getId());
+        dto.setUsuarioId(opinion.getUsuarioId());
+        dto.setActividadId(opinion.getActividadId());
+        dto.setCalificacion(opinion.getCalificacion());
+        dto.setComentario(opinion.getComentario());
+        dto.setFechaCreacion(opinion.getFechaCreacion());
+        dto.setFechaActualizacion(opinion.getFechaActualizacion());
+
+        // Convertir reportes si existen
+        if (opinion.getReporteOpinion() != null) {
+            // Agregar conversión de reportes cuando sea necesario
+        }
+
+        return dto;
+    }
+
+    private OpinionDTO convertToDTOBasic(Opinion opinion) {
+        OpinionDTO dto = new OpinionDTO();
+        dto.setId(opinion.getId());
+        dto.setUsuarioId(opinion.getUsuarioId());
+        dto.setActividadId(opinion.getActividadId());
+        dto.setCalificacion(opinion.getCalificacion());
+        dto.setComentario(opinion.getComentario());
+        dto.setFechaCreacion(opinion.getFechaCreacion());
+        dto.setFechaActualizacion(opinion.getFechaActualizacion());
+        return dto;
     }
 }

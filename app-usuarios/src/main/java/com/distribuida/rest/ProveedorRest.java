@@ -54,7 +54,6 @@ public class ProveedorRest {
 
         obj.setNombreEmpresa(proveedor.getNombreEmpresa());
         obj.setDescripcionEmpresa(proveedor.getDescripcionEmpresa());
-        obj.setLogoEmpresa(obj.getLogoEmpresa());
         obj.setMetodoPago(proveedor.getMetodoPago());
         return Response.ok().build();
     }

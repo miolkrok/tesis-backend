@@ -31,6 +31,8 @@ public class Usuario {
 
     private String rol;
 
+    private String imagenPerfil;
+
     @Column(name="fecha_creacion")
     private LocalDateTime fechaCreacion;
 

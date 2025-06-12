@@ -17,8 +17,8 @@ public class Actividad {
     @SequenceGenerator(name = "actividad_seq", sequenceName = "actividad_seq", allocationSize=1)
     private Integer id;
 
-    @Column(name = "proveedor_id")
-    private Integer proveedorId;
+    @Column(name = "usuario_id")
+    private Integer usuarioId;
 
     private String titulo;
 
@@ -41,6 +41,9 @@ public class Actividad {
     private String duracion;
 
     private String disponibilidad;
+
+    @Column(name="cantidad_personas")
+    private Integer maximoPersonas;
 
     @Column(name="fecha_creacion")
     private LocalDateTime fechaCreacion;
