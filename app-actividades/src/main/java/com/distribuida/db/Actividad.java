@@ -2,6 +2,7 @@ package com.distribuida.db;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.ToString;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -10,6 +11,7 @@ import java.util.List;
 @Entity
 @Table(name = "actividad")
 @Data
+@ToString(exclude = {"galeria", "servicioEvento"})
 public class Actividad {
 
     @Id

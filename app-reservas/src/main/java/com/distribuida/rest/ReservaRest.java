@@ -13,7 +13,9 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Path("/reservas")
 @Produces(MediaType.APPLICATION_JSON)
@@ -36,46 +38,15 @@ public class ReservaRest {
     @GET
     public List<ReservaDTO> findAll() {
         var reservas = reservaRepo.listAll();
-
         return reservas.stream()
-                .map(reserva -> {
-                    try {
-                        var usuario = usuarioRestClient.findById(reserva.getUsuarioId());
-                        var actividad = actividadRestClient.findById(reserva.getActividadId());
-
-                        ReservaDTO dto = new ReservaDTO();
-                        dto.setId(reserva.getId());
-                        //arreglar
-                        //dto.setFechaInicio(reserva.getFechaInicio());
-                        //dto.setFechaFin(reserva.getFechaFin());
-                        dto.setEstado(reserva.getEstado());
-                        //dto.setPrecioTotal(reserva.getPrecioTotal());
-                        //dto.setNumeroPersonas(reserva.getNumeroPersonas());
-
-                        // Información enriquecida desde otros servicios
-                        //dto.setNombreUsuario(usuario.getNombre() + " " + usuario.getApellido());
-                        //dto.setNombreActividad(actividad.getTitulo());
-
-                        return dto;
-                    } catch (Exception e) {
-                        // Si hay un error al obtener información de otros servicios
-                        ReservaDTO dto = new ReservaDTO();
-                        dto.setId(reserva.getId());
-                        //dto.setFechaInicio(reserva.getFechaInicio());
-                        //dto.setFechaFin(reserva.getFechaFin());
-                        dto.setEstado(reserva.getEstado());
-                        //dto.setPrecioTotal(reserva.getPrecioTotal());
-                        //dto.setNumeroPersonas(reserva.getNumeroPersonas());
-
-                        return dto;
-                    }
-                }).toList();
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
     }
 
     @GET
     @Path("/{id}")
     public Response findById(@PathParam("id") Integer id) {
-        System.out.println("findById");
+        System.out.println("findById reserva: " + id);
         var op = reservaRepo.findByIdOptional(id);
         if (op.isEmpty()) {
             return Response.status(Response.Status.NOT_FOUND).build();
@@ -83,36 +54,45 @@ public class ReservaRest {
 
         Reserva reserva = op.get();
         try {
-            var usuario = usuarioRestClient.findById(reserva.getUsuarioId());
-            var actividad = actividadRestClient.findById(reserva.getActividadId());
-
-            ReservaDTO dto = new ReservaDTO();
-            dto.setId(reserva.getId());
-            //dto.setFechaInicio(reserva.getFechaInicio());
-            //dto.setFechaFin(reserva.getFechaFin());
-            dto.setEstado(reserva.getEstado());
-            //dto.setPrecioTotal(reserva.getPrecioTotal());
-            //dto.setNumeroPersonas(reserva.getNumeroPersonas());
-            //dto.setNombreUsuario(usuario.getNombre() + " " + usuario.getApellido());
-            //dto.setNombreActividad(actividad.getTitulo());
-
+            ReservaDTO dto = convertToDTO(reserva);
             return Response.ok(dto).build();
         } catch (Exception e) {
-            // Si no se puede obtener información de otros servicios
-            return Response.ok(reserva).build();
+            System.err.println("Error al obtener información relacionada: " + e.getMessage());
+            return Response.ok(convertToDTOBasic(reserva)).build();
         }
     }
 
     @POST
     public Response create(Reserva reserva) {
         try {
+            // Validar que existan el usuario y la actividad
             usuarioRestClient.findById(reserva.getUsuarioId());
             actividadRestClient.findById(reserva.getActividadId());
 
+            // Establecer fechas automáticamente
+            if (reserva.getFechaCreacion() == null) {
+                reserva.setFechaCreacion(LocalDateTime.now());
+            }
+            if (reserva.getFechaActualizacion() == null) {
+                reserva.setFechaActualizacion(LocalDateTime.now());
+            }
+            if (reserva.getFechaReserva() == null) {
+                reserva.setFechaReserva(LocalDateTime.now());
+            }
+
+            // Estado por defecto
+            if (reserva.getEstado() == null) {
+                reserva.setEstado("PENDIENTE");
+            }
+
             reserva.setId(null);
             reservaRepo.persist(reserva);
-            return Response.status(Response.Status.CREATED).build();
+
+            System.out.println("Reserva creada exitosamente con ID: " + reserva.getId());
+            return Response.status(Response.Status.CREATED).entity(convertToDTO(reserva)).build();
+
         } catch (Exception e) {
+            System.err.println("Error al crear reserva: " + e.getMessage());
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("Error: Usuario o Actividad no encontrados").build();
         }
@@ -121,94 +101,134 @@ public class ReservaRest {
     @PUT
     @Path("/{id}")
     public Response update(@PathParam("id") Integer id, Reserva reserva) {
-        Reserva obj = reservaRepo.findById(id);
+        try {
+            Reserva obj = reservaRepo.findById(id);
+            if (obj == null) {
+                return Response.status(Response.Status.NOT_FOUND).build();
+            }
 
-        obj.setEstado(reserva.getEstado());
-        obj.setFechaReserva(reserva.getFechaReserva());
-        obj.setFechaActividad(reserva.getFechaActividad());
-        obj.setCantidadPersonas(reserva.getCantidadPersonas());
-        obj.setCostoTotal(reserva.getCostoTotal());
-        obj.setFechaCreacion(reserva.getFechaCreacion());
-        obj.setFechaActualizacion(reserva.getFechaActualizacion());
-        return Response.ok().build();
+            // Actualizar campos permitidos
+            if (reserva.getEstado() != null) {
+                obj.setEstado(reserva.getEstado());
+            }
+            if (reserva.getFechaActividad() != null) {
+                obj.setFechaActividad(reserva.getFechaActividad());
+            }
+            if (reserva.getCantidadPersonas() != null) {
+                obj.setCantidadPersonas(reserva.getCantidadPersonas());
+            }
+            if (reserva.getCostoTotal() != null) {
+                obj.setCostoTotal(reserva.getCostoTotal());
+            }
+
+            obj.setFechaActualizacion(LocalDateTime.now());
+
+            return Response.ok(convertToDTO(obj)).build();
+        } catch (Exception e) {
+            System.err.println("Error al actualizar reserva: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     @DELETE
     @Path("/{id}")
     public Response delete(@PathParam("id") Integer id) {
-        reservaRepo.deleteById(id);
-        return Response.ok().build();
+        try {
+            boolean deleted = reservaRepo.deleteById(id);
+            if (!deleted) {
+                return Response.status(Response.Status.NOT_FOUND).build();
+            }
+            return Response.ok().build();
+        } catch (Exception e) {
+            System.err.println("Error al eliminar reserva: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     @GET
     @Path("/usuario/{usuarioId}")
     public List<ReservaDTO> findByUsuario(@PathParam("usuarioId") Integer usuarioId) {
         var reservas = reservaRepo.find("usuarioId", usuarioId).list();
-
         return reservas.stream()
-                .map(reserva -> {
-                    try {
-                        var usuario = usuarioRestClient.findById(reserva.getUsuarioId());
-                        var actividad = actividadRestClient.findById(reserva.getActividadId());
-
-                        ReservaDTO dto = new ReservaDTO();
-                        dto.setId(reserva.getId());
-                        //dto.setFechaInicio(reserva.getFechaInicio());
-                        //dto.setFechaFin(reserva.getFechaFin());
-                        dto.setEstado(reserva.getEstado());
-                        //dto.setPrecioTotal(reserva.getPrecioTotal());
-                        //dto.setNumeroPersonas(reserva.getNumeroPersonas());
-                        //dto.setNombreUsuario(usuario.getNombre() + " " + usuario.getApellido());
-                        //dto.setNombreActividad(actividad.getTitulo());
-
-                        return dto;
-                    } catch (Exception e) {
-                        ReservaDTO dto = new ReservaDTO();
-                        dto.setId(reserva.getId());
-                        //dto.setFechaInicio(reserva.getFechaInicio());
-                        //dto.setFechaFin(reserva.getFechaFin());
-                        dto.setEstado(reserva.getEstado());
-                        //dto.setPrecioTotal(reserva.getPrecioTotal());
-                        //dto.setNumeroPersonas(reserva.getNumeroPersonas());
-
-                        return dto;
-                    }
-                }).toList();
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
     }
 
     @GET
     @Path("/actividad/{actividadId}")
     public List<ReservaDTO> findByActividad(@PathParam("actividadId") Integer actividadId) {
         var reservas = reservaRepo.find("actividadId", actividadId).list();
-
         return reservas.stream()
-                .map(reserva -> {
-                    try {
-                        var usuario = usuarioRestClient.findById(reserva.getUsuarioId());
-                        var actividad = actividadRestClient.findById(reserva.getActividadId());
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
 
-                        ReservaDTO dto = new ReservaDTO();
-                        dto.setId(reserva.getId());
-                        //dto.setFechaInicio(reserva.getFechaInicio());
-                        //dto.setFechaFin(reserva.getFechaFin());
-                        dto.setEstado(reserva.getEstado());
-                        //dto.setPrecioTotal(reserva.getPrecioTotal());
-                        //dto.setNumeroPersonas(reserva.getNumeroPersonas());
-                        //dto.setNombreUsuario(usuario.getNombre() + " " + usuario.getApellido());
-                        //dto.setNombreActividad(actividad.getTitulo());
+    @GET
+    @Path("/estado/{estado}")
+    public List<ReservaDTO> findByEstado(@PathParam("estado") String estado) {
+        var reservas = reservaRepo.find("estado", estado).list();
+        return reservas.stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
 
-                        return dto;
-                    } catch (Exception e) {
-                        ReservaDTO dto = new ReservaDTO();
-                        dto.setId(reserva.getId());
-                        //dto.setFechaInicio(reserva.getFechaInicio());
-                        //dto.setFechaFin(reserva.getFechaFin());
-                        dto.setEstado(reserva.getEstado());
-                        //dto.setPrecioTotal(reserva.getPrecioTotal());
-                        //dto.setNumeroPersonas(reserva.getNumeroPersonas());
+    // Endpoint para cambiar estado de reserva
+    @PUT
+    @Path("/{id}/estado")
+    public Response cambiarEstado(@PathParam("id") Integer id, @QueryParam("nuevoEstado") String nuevoEstado) {
+        try {
+            Reserva reserva = reservaRepo.findById(id);
+            if (reserva == null) {
+                return Response.status(Response.Status.NOT_FOUND).build();
+            }
 
-                        return dto;
-                    }
-                }).toList();
+            String estadoAnterior = reserva.getEstado();
+            reserva.setEstado(nuevoEstado);
+            reserva.setFechaActualizacion(LocalDateTime.now());
+
+            System.out.println("Estado de reserva " + id + " cambiado de " + estadoAnterior + " a " + nuevoEstado);
+
+            return Response.ok(convertToDTO(reserva)).build();
+        } catch (Exception e) {
+            System.err.println("Error al cambiar estado de reserva: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    // Métodos de conversión
+    private ReservaDTO convertToDTO(Reserva reserva) {
+        ReservaDTO dto = new ReservaDTO();
+        dto.setId(reserva.getId());
+        dto.setActividadId(reserva.getActividadId());
+        dto.setUsuarioId(reserva.getUsuarioId());
+        dto.setEstado(reserva.getEstado());
+        dto.setFechaReserva(reserva.getFechaReserva());
+        dto.setFechaActividad(reserva.getFechaActividad());
+        dto.setCantidadPersonas(reserva.getCantidadPersonas());
+        dto.setCostoTotal(reserva.getCostoTotal());
+        dto.setFechaCreacion(reserva.getFechaCreacion());
+        dto.setFechaActualizacion(reserva.getFechaActualizacion());
+
+        // Incluir historial si existe
+        if (reserva.getHistorialReserva() != null) {
+            dto.setHistorialReserva(reserva.getHistorialReserva());
+        }
+
+        return dto;
+    }
+
+    private ReservaDTO convertToDTOBasic(Reserva reserva) {
+        ReservaDTO dto = new ReservaDTO();
+        dto.setId(reserva.getId());
+        dto.setActividadId(reserva.getActividadId());
+        dto.setUsuarioId(reserva.getUsuarioId());
+        dto.setEstado(reserva.getEstado());
+        dto.setFechaReserva(reserva.getFechaReserva());
+        dto.setFechaActividad(reserva.getFechaActividad());
+        dto.setCantidadPersonas(reserva.getCantidadPersonas());
+        dto.setCostoTotal(reserva.getCostoTotal());
+        dto.setFechaCreacion(reserva.getFechaCreacion());
+        dto.setFechaActualizacion(reserva.getFechaActualizacion());
+        return dto;
     }
 }

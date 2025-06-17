@@ -2,10 +2,12 @@ package com.distribuida.db;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.ToString;
 
 @Entity
 @Table(name = "proveedor")
 @Data
+@ToString(exclude = "usuario")
 public class Proveedor {
 
     @Id
