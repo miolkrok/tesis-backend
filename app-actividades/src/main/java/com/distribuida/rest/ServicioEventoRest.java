@@ -5,12 +5,21 @@ import com.distribuida.db.Galeria;
 import com.distribuida.db.ServicioEvento;
 import com.distribuida.repo.ActividadRepository;
 import com.distribuida.repo.ServicioEventoRepository;
+import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 import java.util.List;
 
+
+@Path("/servicios-evento")
+@Produces(MediaType.APPLICATION_JSON)
+@Consumes(MediaType.APPLICATION_JSON)
+@ApplicationScoped
+@Transactional
 public class ServicioEventoRest {
 
     @Inject
