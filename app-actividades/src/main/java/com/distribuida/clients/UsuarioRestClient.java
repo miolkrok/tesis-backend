@@ -2,8 +2,10 @@ package com.distribuida.clients;
 
 
 import com.distribuida.dtos.UsuarioDTO;
+import io.quarkus.restclient.config.RestClientConfig;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
+import org.eclipse.microprofile.rest.client.annotation.RegisterClientHeaders;
 import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
 
 import java.util.List;
@@ -12,6 +14,7 @@ import java.util.List;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @RegisterRestClient(configKey = "UsuarioRestClient")
+@RegisterClientHeaders(RestClientConfig.class)
 public interface UsuarioRestClient {
     @GET
     @Path("/{id}")

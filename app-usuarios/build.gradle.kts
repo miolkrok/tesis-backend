@@ -41,6 +41,20 @@ dependencies {
 
     //HEALTH
     implementation("io.quarkus:quarkus-smallrye-health")
+
+    // Bcrypt para passwords
+    implementation("at.favre.lib:bcrypt:0.10.2")
+
+    // Validación
+    implementation("io.quarkus:quarkus-hibernate-validator")
+
+    // JWT y Seguridad
+    implementation("io.quarkus:quarkus-smallrye-jwt")
+    implementation("io.quarkus:quarkus-smallrye-jwt-build")
+    implementation("io.quarkus:quarkus-security-jpa")
+
+    //scheduler
+    implementation("io.quarkus:quarkus-scheduler:3.24.0")
 }
 
 tasks.test {

@@ -2,15 +2,21 @@ package com.distribuida.rest;
 
 import com.distribuida.db.Usuario;
 import com.distribuida.repo.UsuarioRepository;
+import io.quarkus.security.Authenticated;
+import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.SecurityContext;
+import org.eclipse.microprofile.jwt.JsonWebToken;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Path("/usuarios")
@@ -18,21 +24,38 @@ import java.util.List;
 @Consumes(MediaType.APPLICATION_JSON)
 @ApplicationScoped
 @Transactional
+@Authenticated
 public class UsuarioRest {
 
     @Inject
     private UsuarioRepository usuarioRepo;
 
+    @Inject
+    JsonWebToken jwt;
+
     @GET
+    @RolesAllowed({"ADMIN"})
     public List<Usuario> findAll() {
-        System.out.println("findAll");
+        System.out.println("findAll usuarios - Admin access");
         return usuarioRepo.listAll();
     }
 
     @GET
     @Path("/{id}")
-    public Response findById(@PathParam("id") Integer id) {
-        System.out.println("findById");
+    @RolesAllowed({"ADMIN", "CLIENTE", "PROVEEDOR"})
+    public Response findById(@PathParam("id") Integer id,
+                             @Context SecurityContext securityContext) {
+
+        // Los usuarios solo pueden ver su propia información, excepto ADMIN
+        if (!securityContext.isUserInRole("ADMIN")) {
+            Integer tokenUserId = Integer.valueOf(jwt.getClaim("userId"));
+            if (!tokenUserId.equals(id)) {
+                return Response.status(Response.Status.FORBIDDEN)
+                        .entity("No tienes permiso para ver este usuario")
+                        .build();
+            }
+        }
+
         var op = usuarioRepo.findByIdOptional(id);
         if (op.isEmpty()) {
             return Response.status(Response.Status.NOT_FOUND).build();
@@ -40,34 +63,57 @@ public class UsuarioRest {
         return Response.ok(op.get()).build();
     }
 
-    @POST
-    public Response create(Usuario usuario) {
-        usuario.setId(null);
-        usuarioRepo.persist(usuario);
-        return Response.status(Response.Status.CREATED).build();
-    }
-
     @PUT
     @Path("/{id}")
-    public Response update(@PathParam("id") Integer id, Usuario usuario) {
+    @RolesAllowed({"ADMIN", "CLIENTE", "PROVEEDOR"})
+    public Response update(@PathParam("id") Integer id, Usuario usuario,
+                           @Context SecurityContext securityContext) {
+
+        // Los usuarios solo pueden actualizar su propia información, excepto ADMIN
+        if (!securityContext.isUserInRole("ADMIN")) {
+            Integer tokenUserId = Integer.valueOf(jwt.getClaim("userId"));
+            if (!tokenUserId.equals(id)) {
+                return Response.status(Response.Status.FORBIDDEN)
+                        .entity("No tienes permiso para actualizar este usuario")
+                        .build();
+            }
+        }
+
         Usuario obj = usuarioRepo.findById(id);
+        if (obj == null) {
+            return Response.status(Response.Status.NOT_FOUND).build();
+        }
 
         obj.setNombre(usuario.getNombre());
         obj.setApellido(usuario.getApellido());
-        obj.setEmail(usuario.getEmail());
         obj.setTelefono(usuario.getTelefono());
-        obj.setPassword(usuario.getPassword());
-        obj.setEmail(usuario.getEmail());
         obj.setDireccion(usuario.getDireccion());
-        obj.setFechaCreacion(usuario.getFechaCreacion());
-        obj.setFechaActualizacion(usuario.getFechaActualizacion());
+        obj.setFechaActualizacion(LocalDateTime.now());
+
+        // Solo ADMIN puede cambiar email, rol y estado activo
+        if (securityContext.isUserInRole("ADMIN")) {
+            obj.setEmail(usuario.getEmail());
+            obj.setRol(usuario.getRol());
+            //obj.setActivo(usuario.getActivo());
+        }
+
         return Response.ok().build();
     }
 
     @DELETE
     @Path("/{id}")
+    @RolesAllowed({"ADMIN"})
     public Response delete(@PathParam("id") Integer id) {
-        usuarioRepo.deleteById(id);
+        // Soft delete - solo marcar como inactivo
+        Usuario usuario = usuarioRepo.findById(id);
+        if (usuario == null) {
+            return Response.status(Response.Status.NOT_FOUND).build();
+        }
+
+        //usuario.setActivo(false);
+        usuario.setFechaActualizacion(LocalDateTime.now());
+        usuarioRepo.persist(usuario);
+
         return Response.ok().build();
     }
 }

@@ -1,16 +1,22 @@
 package com.distribuida.db;
 
+import io.quarkus.security.jpa.Password;
+import io.quarkus.security.jpa.Roles;
+import io.quarkus.security.jpa.UserDefinition;
+import io.quarkus.security.jpa.Username;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.ToString;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 
 @Entity
 @Table(name = "usuario")
 @Data
 @ToString(exclude = "proveedor")
+@UserDefinition
 public class Usuario {
 
     @Id
@@ -21,16 +27,20 @@ public class Usuario {
 
     private String nombre;
 
+    @Username
+    @Column(unique = true, nullable = false)
     private String apellido;
 
     private String email;
 
+    @Password
     private String password;
 
     private String telefono;
 
     private String direccion;
 
+    @Roles
     private String rol;
 
     private String imagenPerfil;
@@ -44,6 +54,9 @@ public class Usuario {
     @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     @JoinColumn(name = "proveedor_id_usuario")
     private Proveedor proveedor;
+
+    @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<RefreshToken> refreshTokens;
 
     public void setProveedor(Proveedor proveedor) {
         this.proveedor = proveedor;
