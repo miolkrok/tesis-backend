@@ -50,6 +50,11 @@ dependencies {
 
     // Mailer para envío de emails
     implementation("io.quarkus:quarkus-mailer")
+
+    // JWT y Seguridad
+    implementation("io.quarkus:quarkus-smallrye-jwt")
+    implementation("io.quarkus:quarkus-smallrye-jwt-build")
+    implementation("io.quarkus:quarkus-security-jpa")
 }
 
 tasks.test {

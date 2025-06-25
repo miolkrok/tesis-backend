@@ -27,10 +27,10 @@ public class Usuario {
 
     private String nombre;
 
-    @Username
-    @Column(unique = true, nullable = false)
     private String apellido;
 
+    @Username
+    @Column(unique = true, nullable = false)
     private String email;
 
     @Password
@@ -44,6 +44,12 @@ public class Usuario {
     private String rol;
 
     private String imagenPerfil;
+
+    @Column(name="activo")
+    private Boolean activo = true;
+
+    @Column(name="email_verificado")
+    private Boolean emailVerificado = false;
 
     @Column(name="fecha_creacion")
     private LocalDateTime fechaCreacion;

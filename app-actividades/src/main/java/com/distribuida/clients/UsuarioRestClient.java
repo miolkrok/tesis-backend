@@ -1,8 +1,8 @@
 package com.distribuida.clients;
 
 
+import com.distribuida.config.RestClientConfig;
 import com.distribuida.dtos.UsuarioDTO;
-import io.quarkus.restclient.config.RestClientConfig;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import org.eclipse.microprofile.rest.client.annotation.RegisterClientHeaders;

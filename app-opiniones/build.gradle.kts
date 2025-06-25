@@ -13,7 +13,7 @@ repositories {
 
 val quarkusVersion = "3.11.1"
 dependencies {
-//Evita poner la version en las siguientes dependencias
+    //Evita poner la version en las siguientes dependencias
     implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:${quarkusVersion}"))
     implementation("io.quarkus:quarkus-arc") //Implementacion de CDI de quarkus (Motor de comp de negocio)
     implementation("io.quarkus:quarkus-resteasy-reactive") //Motor de rest JAXRS en su forma reactiva
@@ -42,6 +42,11 @@ dependencies {
 
     //HEALTH
     implementation("io.quarkus:quarkus-smallrye-health")
+
+    // JWT y Seguridad
+    implementation("io.quarkus:quarkus-smallrye-jwt")
+    implementation("io.quarkus:quarkus-smallrye-jwt-build")
+    implementation("io.quarkus:quarkus-security-jpa")
 }
 
 tasks.test {

@@ -80,7 +80,7 @@ public class   NotificacionRest {
                     evento.getTitulo(),
                     evento.getMensaje(),
                     evento.getTipo(),
-                    //evento.getRelacionadoId(),
+                    evento.getUsuarioId(),
                     evento.getTipoEntidad()
             );
 

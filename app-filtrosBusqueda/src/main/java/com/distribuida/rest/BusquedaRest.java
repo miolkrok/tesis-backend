@@ -68,7 +68,7 @@ public class BusquedaRest {
     @Transactional
     public void actualizarIndices() {
         try {
-            System.out.println("🔄 Iniciando proceso de indexación...");
+            System.out.println("Iniciando proceso de indexación...");
 
             // Obtener todas las actividades
             var actividades = actividadRestClient.findAll();
@@ -105,7 +105,7 @@ public class BusquedaRest {
                     } catch (Exception e) {
                         // Si falla, usar valor por defecto
                         indice.setPuntuacionPromedio(0.0);
-                        System.out.println("⚠️ No se pudo obtener promedio de opiniones para actividad ID: " + actividad.getId());
+                        System.out.println("No se pudo obtener promedio de opiniones para actividad ID: " + actividad.getId());
                     }
 
                     // Guardar índice
@@ -114,17 +114,17 @@ public class BusquedaRest {
 
                 } catch (Exception e) {
                     errores++;
-                    System.err.println("❌ Error indexando actividad ID: " + actividad.getId() + ": " + e.getMessage());
+                    System.err.println("Error indexando actividad ID: " + actividad.getId() + ": " + e.getMessage());
                 }
             }
 
-            System.out.println("✅ Indexación completada:");
+            System.out.println("Indexación completada:");
             System.out.println("   - Actividades indexadas: " + indexadas);
             System.out.println("   - Errores: " + errores);
             System.out.println("   - Total actividades: " + actividades.size());
 
         } catch (Exception e) {
-            System.err.println("❌ Error general en el proceso de indexación: " + e.getMessage());
+            System.err.println("Error general en el proceso de indexación: " + e.getMessage());
             e.printStackTrace();
         }
     }
