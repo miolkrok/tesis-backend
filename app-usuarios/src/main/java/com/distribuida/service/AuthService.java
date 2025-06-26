@@ -37,9 +37,9 @@ public class AuthService {
                 .orElseThrow(() -> new NotAuthorizedException("Credenciales inválidas"));
 
         // Verificar que el usuario esté activo
-        //if (!usuario.getActivo()) {
-          //  throw new NotAuthorizedException("Usuario inactivo");
-        //}
+        if (!usuario.getActivo()) {
+            throw new NotAuthorizedException("Usuario inactivo");
+        }
 
         // Verificar contraseña
         BCrypt.Result result = BCrypt.verifyer().verify(
@@ -98,8 +98,8 @@ public class AuthService {
         usuario.setTelefono(registerRequest.getTelefono());
         usuario.setDireccion(registerRequest.getDireccion());
         usuario.setRol(registerRequest.getRol());
-        //usuario.setActivo(true);
-        //usuario.setEmailVerificado(false);
+        usuario.setActivo(true);
+        usuario.setEmailVerificado(false);
         usuario.setFechaCreacion(LocalDateTime.now());
         usuario.setFechaActualizacion(LocalDateTime.now());
 
@@ -135,9 +135,9 @@ public class AuthService {
         Usuario usuario = refreshToken.getUsuario();
 
         // Verificar que el usuario esté activo
-        //if (!usuario.getActivo()) {
-            //throw new NotAuthorizedException("Usuario inactivo");
-        //}
+        if (!usuario.getActivo()) {
+            throw new NotAuthorizedException("Usuario inactivo");
+        }
 
         // Invalidar token anterior
         refreshToken.setActivo(false);

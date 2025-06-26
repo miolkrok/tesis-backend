@@ -48,7 +48,8 @@ public class UsuarioRest {
 
         // Los usuarios solo pueden ver su propia información, excepto ADMIN
         if (!securityContext.isUserInRole("ADMIN")) {
-            Integer tokenUserId = Integer.valueOf(jwt.getClaim("userId"));
+            Long tokenUserIdLong = jwt.getClaim("userId");
+            Integer tokenUserId = tokenUserIdLong.intValue();
             if (!tokenUserId.equals(id)) {
                 return Response.status(Response.Status.FORBIDDEN)
                         .entity("No tienes permiso para ver este usuario")
@@ -71,10 +72,11 @@ public class UsuarioRest {
 
         // Los usuarios solo pueden actualizar su propia información, excepto ADMIN
         if (!securityContext.isUserInRole("ADMIN")) {
-            Integer tokenUserId = Integer.valueOf(jwt.getClaim("userId"));
+            Long tokenUserIdLong = jwt.getClaim("userId");
+            Integer tokenUserId = tokenUserIdLong.intValue();
             if (!tokenUserId.equals(id)) {
                 return Response.status(Response.Status.FORBIDDEN)
-                        .entity("No tienes permiso para actualizar este usuario")
+                        .entity("No tienes permiso para ver este usuario")
                         .build();
             }
         }

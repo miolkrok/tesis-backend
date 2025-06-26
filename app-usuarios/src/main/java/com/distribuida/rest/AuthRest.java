@@ -93,8 +93,11 @@ public class AuthRest {
     @Path("/me")
     @Authenticated
     public Response getCurrentUser() {
+
+        Integer userId = jwt.getClaim("userId");
+
         return Response.ok(new UserInfoResponse(
-                Integer.valueOf(jwt.getClaim("userId")),
+                userId,
                 jwt.getName(),
                 jwt.getClaim("nombre"),
                 jwt.getClaim("apellido"),
