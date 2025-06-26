@@ -94,7 +94,15 @@ public class AuthRest {
     @Authenticated
     public Response getCurrentUser() {
 
-        Integer userId = jwt.getClaim("userId");
+        // Obtener el userId manejando el tipo JsonNumber
+        Object userIdClaim = jwt.getClaim("userId");
+        Integer userId = null;
+
+        if (userIdClaim != null) {
+            if (userIdClaim instanceof Number) {
+                userId = ((Number) userIdClaim).intValue();
+            }
+        }
 
         return Response.ok(new UserInfoResponse(
                 userId,
