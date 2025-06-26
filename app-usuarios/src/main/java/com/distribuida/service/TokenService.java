@@ -27,7 +27,7 @@ public class TokenService {
         String token = Jwt.issuer(issuer)
                 .upn(usuario.getEmail())
                 .groups(new HashSet<>(Arrays.asList(usuario.getRol().split(","))))
-                .claim("userId", usuario.getId())
+                .claim("userId", usuario.getId().toString())
                 .claim("nombre", usuario.getNombre())
                 .claim("apellido", usuario.getApellido())
                 .expiresAt(Instant.now().plus(accessTokenDuration))

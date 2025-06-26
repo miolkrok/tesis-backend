@@ -94,15 +94,31 @@ public class AuthRest {
     @Authenticated
     public Response getCurrentUser() {
 
-        // Obtener el userId manejando el tipo JsonNumber
-        Object userIdClaim = jwt.getClaim("userId");
+        // Obtener el userId de manera más robusta
         Integer userId = null;
 
-        if (userIdClaim != null) {
-            if (userIdClaim instanceof Number) {
-                userId = ((Number) userIdClaim).intValue();
+        try {
+            // Primero intentar obtenerlo directamente como String y parsearlo
+            Object userIdClaim = jwt.getClaim("userId");
+
+            if (userIdClaim != null) {
+                if (userIdClaim instanceof Number) {
+                    userId = ((Number) userIdClaim).intValue();
+                } else if (userIdClaim instanceof String) {
+                    userId = Integer.valueOf((String) userIdClaim);
+                } else {
+                    // Si es otro tipo, intentar convertirlo a String y luego a Integer
+                    userId = Integer.valueOf(userIdClaim.toString());
+                }
             }
+        } catch (Exception e) {
+            System.err.println("Error al obtener userId del JWT: " + e.getMessage());
+            // Como fallback, podrías buscar el usuario por email
+            // Pero para debugging, mejor mantener null y investigar
         }
+
+        System.out.println("UserId obtenido del JWT: " + userId);
+        System.out.println("Tipo de userIdClaim: " + (jwt.getClaim("userId") != null ? jwt.getClaim("userId").getClass().getName() : "null"));
 
         return Response.ok(new UserInfoResponse(
                 userId,
@@ -111,6 +127,7 @@ public class AuthRest {
                 jwt.getClaim("apellido"),
                 jwt.getGroups()
         )).build();
+
     }
 }
 
