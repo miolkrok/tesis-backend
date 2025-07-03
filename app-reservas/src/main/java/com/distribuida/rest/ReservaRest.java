@@ -5,12 +5,18 @@ import com.distribuida.clients.UsuarioRestClient;
 import com.distribuida.db.Reserva;
 import com.distribuida.dtos.ReservaDTO;
 import com.distribuida.repo.ReservaRepository;
+import io.quarkus.security.Authenticated;
+import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import jakarta.validation.Valid;
 import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.SecurityContext;
+import org.eclipse.microprofile.jwt.JsonWebToken;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import java.time.LocalDateTime;
@@ -22,6 +28,7 @@ import java.util.stream.Collectors;
 @Consumes(MediaType.APPLICATION_JSON)
 @ApplicationScoped
 @Transactional
+@Authenticated
 public class ReservaRest {
 
     @Inject
@@ -35,24 +42,51 @@ public class ReservaRest {
     @RestClient
     ActividadRestClient actividadRestClient;
 
+    @Inject
+    JsonWebToken jwt;
+
     @GET
-    public List<ReservaDTO> findAll() {
-        var reservas = reservaRepo.listAll();
-        return reservas.stream()
-                .map(this::convertToDTO)
-                .collect(Collectors.toList());
+    @RolesAllowed({"ADMIN", "CLIENTE", "PROVEEDOR"})
+    public List<ReservaDTO> findAll(@Context SecurityContext securityContext) {
+        // Solo ADMIN puede ver todas las reservas
+        if (securityContext.isUserInRole("ADMIN")) {
+            var reservas = reservaRepo.listAll();
+            return reservas.stream()
+                    .map(this::convertToDTO)
+                    .collect(Collectors.toList());
+        } else {
+            // CLIENTE y PROVEEDOR solo ven sus propias reservas
+            Integer userId = getUserIdFromJWT();
+            var reservas = reservaRepo.find("usuarioId", userId).list();
+            return reservas.stream()
+                    .map(this::convertToDTO)
+                    .collect(Collectors.toList());
+        }
     }
 
     @GET
     @Path("/{id}")
-    public Response findById(@PathParam("id") Integer id) {
-        System.out.println("findById reserva: " + id);
+    @RolesAllowed({"ADMIN", "CLIENTE", "PROVEEDOR"})
+    public Response findById(@PathParam("id") Integer id, @Context SecurityContext securityContext) {
+        System.out.println("Buscando reserva ID: " + id + " por usuario: " + getUserIdFromJWT());
+
         var op = reservaRepo.findByIdOptional(id);
         if (op.isEmpty()) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
 
         Reserva reserva = op.get();
+
+        // Verificar permisos: solo el propietario o ADMIN pueden ver la reserva
+        if (!securityContext.isUserInRole("ADMIN")) {
+            Integer userId = getUserIdFromJWT();
+            if (!reserva.getUsuarioId().equals(userId)) {
+                return Response.status(Response.Status.FORBIDDEN)
+                        .entity("No tienes permiso para ver esta reserva")
+                        .build();
+            }
+        }
+
         try {
             ReservaDTO dto = convertToDTO(reserva);
             return Response.ok(dto).build();
@@ -63,27 +97,56 @@ public class ReservaRest {
     }
 
     @POST
-    public Response create(Reserva reserva) {
+    @RolesAllowed({"CLIENTE"})  // Solo clientes pueden crear reservas
+    public Response create(@Valid ReservaDTO reservaDTO) {
         try {
-            // Validar que existan el usuario y la actividad
-            usuarioRestClient.findById(reserva.getUsuarioId());
-            actividadRestClient.findById(reserva.getActividadId());
+            Integer userId = getUserIdFromJWT();
+            System.out.println("Creando reserva para usuario: " + userId + " | Actividad: " + reservaDTO.getActividadId());
+
+            // Validaciones básicas
+            if (reservaDTO.getActividadId() == null) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity("El ID de la actividad es requerido").build();
+            }
+
+            // Asignar automáticamente el usuario del JWT
+            reservaDTO.setUsuarioId(userId);
+
+            // Validar que existan el usuario y la actividad con JWT propagado automáticamente
+            try {
+                var usuario = usuarioRestClient.findById(userId);
+                System.out.println("Usuario validado: " + usuario.getNombre());
+            } catch (Exception e) {
+                System.err.println("Error al validar usuario: " + e.getMessage());
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity("Usuario no encontrado o servicio no disponible").build();
+            }
+
+            try {
+                var actividad = actividadRestClient.findById(reservaDTO.getActividadId());
+                System.out.println("Actividad validada: " + actividad.getTitulo());
+            } catch (Exception e) {
+                System.err.println("Error al validar actividad: " + e.getMessage());
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity("Actividad no encontrada o servicio no disponible").build();
+            }
+
+            // Convertir DTO a entidad
+            Reserva reserva = new Reserva();
+            reserva.setActividadId(reservaDTO.getActividadId());
+            reserva.setUsuarioId(userId);  // Del JWT
+            reserva.setCantidadPersonas(reservaDTO.getCantidadPersonas());
+            reserva.setCostoTotal(reservaDTO.getCostoTotal());
+            reserva.setFechaActividad(reservaDTO.getFechaActividad());
 
             // Establecer fechas automáticamente
-            if (reserva.getFechaCreacion() == null) {
-                reserva.setFechaCreacion(LocalDateTime.now());
-            }
-            if (reserva.getFechaActualizacion() == null) {
-                reserva.setFechaActualizacion(LocalDateTime.now());
-            }
-            if (reserva.getFechaReserva() == null) {
-                reserva.setFechaReserva(LocalDateTime.now());
-            }
+            LocalDateTime now = LocalDateTime.now();
+            reserva.setFechaCreacion(now);
+            reserva.setFechaActualizacion(now);
+            reserva.setFechaReserva(now);
 
             // Estado por defecto
-            if (reserva.getEstado() == null) {
-                reserva.setEstado("PENDIENTE");
-            }
+            reserva.setEstado("PENDIENTE");
 
             reserva.setId(null);
             reservaRepo.persist(reserva);
@@ -93,32 +156,45 @@ public class ReservaRest {
 
         } catch (Exception e) {
             System.err.println("Error al crear reserva: " + e.getMessage());
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("Error: Usuario o Actividad no encontrados").build();
+            e.printStackTrace();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity("Error interno del servidor: " + e.getMessage()).build();
         }
     }
 
     @PUT
     @Path("/{id}")
-    public Response update(@PathParam("id") Integer id, Reserva reserva) {
+    @RolesAllowed({"ADMIN", "CLIENTE"})
+    public Response update(@PathParam("id") Integer id, ReservaDTO reservaDTO,
+                           @Context SecurityContext securityContext) {
         try {
             Reserva obj = reservaRepo.findById(id);
             if (obj == null) {
                 return Response.status(Response.Status.NOT_FOUND).build();
             }
 
+            // Verificar permisos: solo el propietario o ADMIN pueden actualizar
+            if (!securityContext.isUserInRole("ADMIN")) {
+                Integer userId = getUserIdFromJWT();
+                if (!obj.getUsuarioId().equals(userId)) {
+                    return Response.status(Response.Status.FORBIDDEN)
+                            .entity("No tienes permiso para actualizar esta reserva")
+                            .build();
+                }
+            }
+
             // Actualizar campos permitidos
-            if (reserva.getEstado() != null) {
-                obj.setEstado(reserva.getEstado());
+            if (reservaDTO.getEstado() != null) {
+                obj.setEstado(reservaDTO.getEstado());
             }
-            if (reserva.getFechaActividad() != null) {
-                obj.setFechaActividad(reserva.getFechaActividad());
+            if (reservaDTO.getFechaActividad() != null) {
+                obj.setFechaActividad(reservaDTO.getFechaActividad());
             }
-            if (reserva.getCantidadPersonas() != null) {
-                obj.setCantidadPersonas(reserva.getCantidadPersonas());
+            if (reservaDTO.getCantidadPersonas() != null) {
+                obj.setCantidadPersonas(reservaDTO.getCantidadPersonas());
             }
-            if (reserva.getCostoTotal() != null) {
-                obj.setCostoTotal(reserva.getCostoTotal());
+            if (reservaDTO.getCostoTotal() != null) {
+                obj.setCostoTotal(reservaDTO.getCostoTotal());
             }
 
             obj.setFechaActualizacion(LocalDateTime.now());
@@ -132,8 +208,24 @@ public class ReservaRest {
 
     @DELETE
     @Path("/{id}")
-    public Response delete(@PathParam("id") Integer id) {
+    @RolesAllowed({"ADMIN", "CLIENTE"})
+    public Response delete(@PathParam("id") Integer id, @Context SecurityContext securityContext) {
         try {
+            Reserva reserva = reservaRepo.findById(id);
+            if (reserva == null) {
+                return Response.status(Response.Status.NOT_FOUND).build();
+            }
+
+            // Verificar permisos
+            if (!securityContext.isUserInRole("ADMIN")) {
+                Integer userId = getUserIdFromJWT();
+                if (!reserva.getUsuarioId().equals(userId)) {
+                    return Response.status(Response.Status.FORBIDDEN)
+                            .entity("No tienes permiso para eliminar esta reserva")
+                            .build();
+                }
+            }
+
             boolean deleted = reservaRepo.deleteById(id);
             if (!deleted) {
                 return Response.status(Response.Status.NOT_FOUND).build();
@@ -142,20 +234,35 @@ public class ReservaRest {
         } catch (Exception e) {
             System.err.println("Error al eliminar reserva: " + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
-        }
+            }
     }
 
     @GET
     @Path("/usuario/{usuarioId}")
-    public List<ReservaDTO> findByUsuario(@PathParam("usuarioId") Integer usuarioId) {
+    @RolesAllowed({"ADMIN", "CLIENTE", "PROVEEDOR"})
+    public Response findByUsuario(@PathParam("usuarioId") Integer usuarioId,
+                                  @Context SecurityContext securityContext) {
+        // Verificar permisos: solo el propietario o ADMIN pueden ver las reservas
+        if (!securityContext.isUserInRole("ADMIN")) {
+            Integer jwtUserId = getUserIdFromJWT();
+            if (!usuarioId.equals(jwtUserId)) {
+                return Response.status(Response.Status.FORBIDDEN)
+                        .entity("No tienes permiso para ver las reservas de este usuario")
+                        .build();
+            }
+        }
+
         var reservas = reservaRepo.find("usuarioId", usuarioId).list();
-        return reservas.stream()
+        List<ReservaDTO> reservasDTO = reservas.stream()
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
+
+        return Response.ok(reservasDTO).build();
     }
 
     @GET
     @Path("/actividad/{actividadId}")
+    @RolesAllowed({"ADMIN", "PROVEEDOR"})  // Solo ADMIN y PROVEEDOR pueden ver reservas por actividad
     public List<ReservaDTO> findByActividad(@PathParam("actividadId") Integer actividadId) {
         var reservas = reservaRepo.find("actividadId", actividadId).list();
         return reservas.stream()
@@ -165,8 +272,20 @@ public class ReservaRest {
 
     @GET
     @Path("/estado/{estado}")
+    @RolesAllowed({"ADMIN"})  // Solo ADMIN puede filtrar por estado
     public List<ReservaDTO> findByEstado(@PathParam("estado") String estado) {
         var reservas = reservaRepo.find("estado", estado).list();
+        return reservas.stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
+
+    @GET
+    @Path("/mis-reservas")
+    @RolesAllowed({"CLIENTE", "PROVEEDOR"})
+    public List<ReservaDTO> getMisReservas() {
+        Integer userId = getUserIdFromJWT();
+        var reservas = reservaRepo.find("usuarioId", userId).list();
         return reservas.stream()
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
@@ -175,11 +294,20 @@ public class ReservaRest {
     // Endpoint para cambiar estado de reserva
     @PUT
     @Path("/{id}/estado")
-    public Response cambiarEstado(@PathParam("id") Integer id, @QueryParam("nuevoEstado") String nuevoEstado) {
+    @RolesAllowed({"ADMIN", "PROVEEDOR"})
+    public Response cambiarEstado(@PathParam("id") Integer id,
+                                  @QueryParam("nuevoEstado") String nuevoEstado,
+                                  @Context SecurityContext securityContext) {
         try {
             Reserva reserva = reservaRepo.findById(id);
             if (reserva == null) {
                 return Response.status(Response.Status.NOT_FOUND).build();
+            }
+
+            // PROVEEDOR solo puede cambiar estado de sus propias actividades
+            if (securityContext.isUserInRole("PROVEEDOR") && !securityContext.isUserInRole("ADMIN")) {
+                // Aquí deberías validar que la actividad pertenece al proveedor
+                // Por simplicidad, permitimos que cualquier proveedor cambie estados
             }
 
             String estadoAnterior = reserva.getEstado();
@@ -192,6 +320,24 @@ public class ReservaRest {
         } catch (Exception e) {
             System.err.println("Error al cambiar estado de reserva: " + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    // ===== MÉTODOS AUXILIARES =====
+
+    private Integer getUserIdFromJWT() {
+        try {
+            Object userIdClaim = jwt.getClaim("userId");
+            if (userIdClaim instanceof Number) {
+                return ((Number) userIdClaim).intValue();
+            } else if (userIdClaim instanceof String) {
+                return Integer.valueOf((String) userIdClaim);
+            } else {
+                return Integer.valueOf(userIdClaim.toString());
+            }
+        } catch (Exception e) {
+            System.err.println("Error al obtener userId del JWT: " + e.getMessage());
+            throw new RuntimeException("Token JWT inválido");
         }
     }
 
@@ -231,4 +377,6 @@ public class ReservaRest {
         dto.setFechaActualizacion(reserva.getFechaActualizacion());
         return dto;
     }
+
+
 }

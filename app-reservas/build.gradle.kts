@@ -30,6 +30,9 @@ dependencies {
     implementation("org.projectlombok:lombok:1.18.32")
     annotationProcessor("org.projectlombok:lombok:1.18.32")
 
+    implementation("io.quarkus:quarkus-hibernate-validator")
+    implementation("jakarta.validation:jakarta.validation-api:3.0.2")
+
     // LoadBalancer
     //    implementation("io.smallrye.stork:stork-service-discovery-static-list:2.6.0")
     // Para reconocer al servidor Consul

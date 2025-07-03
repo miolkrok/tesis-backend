@@ -8,12 +8,18 @@ import com.distribuida.dtos.ActividadDTO;
 import com.distribuida.dtos.GaleriaDTO;
 import com.distribuida.dtos.ServicioEventoDTO;
 import com.distribuida.repo.ActividadRepository;
+import io.quarkus.security.Authenticated;
+import jakarta.annotation.security.PermitAll;
+import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.SecurityContext;
+import org.eclipse.microprofile.jwt.JsonWebToken;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import java.time.LocalDateTime;
@@ -34,7 +40,11 @@ public class ActividadRest {
     @RestClient
     UsuarioRestClient usuarioRestClient;
 
+    @Inject
+    JsonWebToken jwt;
+
     @GET
+    @PermitAll  // Público para permitir búsqueda sin login
     public List<ActividadDTO> findAll() {
         var actividades = actividadRepo.listAll();
 
@@ -45,6 +55,7 @@ public class ActividadRest {
 
     @GET
     @Path("/{id}")
+    @PermitAll  // Público para permitir ver detalles sin login
     public Response findById(@PathParam("id") Integer id) {
         var op = actividadRepo.findByIdOptional(id);
         if (op.isEmpty()) {
@@ -57,16 +68,24 @@ public class ActividadRest {
             return Response.ok(dto).build();
         } catch (Exception e) {
             System.err.println("Error al obtener información del usuario/proveedor: " + e.getMessage());
-            // Si no se puede obtener la información del proveedor, devolver DTO básico
             ActividadDTO dto = convertToDTOBasic(actividad);
             return Response.ok(dto).build();
         }
     }
 
     @POST
+    @RolesAllowed({"PROVEEDOR", "ADMIN"})  // Solo proveedores pueden crear actividades
     public Response create(Actividad actividad) {
         try {
+            Integer userId = getUserIdFromJWT();
+            String userRole = getUserRoleFromJWT();
+
+            System.out.println("Creando actividad para usuario: " + userId + " | Rol: " + userRole);
+
             actividad.setId(null);
+
+            // Asignar automáticamente el usuario del JWT
+            actividad.setUsuarioId(userId);
 
             // Establecer fechas automáticamente
             if (actividad.getFechaCreacion() == null) {
@@ -95,7 +114,7 @@ public class ActividadRest {
             actividadRepo.persist(actividad);
             System.out.println("Actividad creada exitosamente con ID: " + actividad.getId());
 
-            return Response.status(Response.Status.CREATED).entity(actividad).build();
+            return Response.status(Response.Status.CREATED).entity(convertToDTO(actividad)).build();
         } catch (Exception e) {
             System.err.println("Error al crear actividad: " + e.getMessage());
             e.printStackTrace();
@@ -106,11 +125,23 @@ public class ActividadRest {
 
     @PUT
     @Path("/{id}")
-    public Response update(@PathParam("id") Integer id, Actividad actividad) {
+    @RolesAllowed({"PROVEEDOR", "ADMIN"})
+    public Response update(@PathParam("id") Integer id, Actividad actividad,
+                           @Context SecurityContext securityContext) {
         try {
             Actividad obj = actividadRepo.findById(id);
             if (obj == null) {
                 return Response.status(Response.Status.NOT_FOUND).build();
+            }
+
+            // Verificar permisos: solo el propietario o ADMIN pueden actualizar
+            if (!securityContext.isUserInRole("ADMIN")) {
+                Integer userId = getUserIdFromJWT();
+                if (!obj.getUsuarioId().equals(userId)) {
+                    return Response.status(Response.Status.FORBIDDEN)
+                            .entity("No tienes permiso para actualizar esta actividad")
+                            .build();
+                }
             }
 
             obj.setTitulo(actividad.getTitulo());
@@ -124,12 +155,7 @@ public class ActividadRest {
             obj.setDisponibilidad(actividad.getDisponibilidad());
             obj.setFechaActualizacion(LocalDateTime.now());
 
-            // CORRECCIÓN: No cambies el proveedorId por actividad.getId()!
-            if (actividad.getUsuarioId() != null) {
-                obj.setUsuarioId(actividad.getUsuarioId());
-            }
-
-            return Response.ok(obj).build();
+            return Response.ok(convertToDTO(obj)).build();
         } catch (Exception e) {
             System.err.println("Error al actualizar actividad: " + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
@@ -138,8 +164,24 @@ public class ActividadRest {
 
     @DELETE
     @Path("/{id}")
-    public Response delete(@PathParam("id") Integer id) {
+    @RolesAllowed({"PROVEEDOR", "ADMIN"})
+    public Response delete(@PathParam("id") Integer id, @Context SecurityContext securityContext) {
         try {
+            Actividad actividad = actividadRepo.findById(id);
+            if (actividad == null) {
+                return Response.status(Response.Status.NOT_FOUND).build();
+            }
+
+            // Verificar permisos: solo el propietario o ADMIN pueden eliminar
+            if (!securityContext.isUserInRole("ADMIN")) {
+                Integer userId = getUserIdFromJWT();
+                if (!actividad.getUsuarioId().equals(userId)) {
+                    return Response.status(Response.Status.FORBIDDEN)
+                            .entity("No tienes permiso para eliminar esta actividad")
+                            .build();
+                }
+            }
+
             boolean deleted = actividadRepo.deleteById(id);
             if (!deleted) {
                 return Response.status(Response.Status.NOT_FOUND).build();
@@ -148,6 +190,43 @@ public class ActividadRest {
         } catch (Exception e) {
             System.err.println("Error al eliminar actividad: " + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GET
+    @Path("/mis-actividades")
+    @RolesAllowed({"PROVEEDOR"})
+    public List<ActividadDTO> getMisActividades() {
+        Integer userId = getUserIdFromJWT();
+        var actividades = actividadRepo.find("usuarioId", userId).list();
+        return actividades.stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
+
+    // ===== MÉTODOS AUXILIARES =====
+
+    private Integer getUserIdFromJWT() {
+        try {
+            Object userIdClaim = jwt.getClaim("userId");
+            if (userIdClaim instanceof Number) {
+                return ((Number) userIdClaim).intValue();
+            } else if (userIdClaim instanceof String) {
+                return Integer.valueOf((String) userIdClaim);
+            } else {
+                return Integer.valueOf(userIdClaim.toString());
+            }
+        } catch (Exception e) {
+            System.err.println("Error al obtener userId del JWT: " + e.getMessage());
+            throw new RuntimeException("Token JWT inválido");
+        }
+    }
+
+    private String getUserRoleFromJWT() {
+        try {
+            return jwt.getGroups().iterator().next();
+        } catch (Exception e) {
+            return "UNKNOWN";
         }
     }
 

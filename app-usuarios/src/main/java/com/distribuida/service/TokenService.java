@@ -14,6 +14,10 @@ import java.util.UUID;
 
 @ApplicationScoped
 public class TokenService {
+    /**
+     * Servicio para generar tokens JWT
+     * @author Distribuida
+     */
     @ConfigProperty(name = "mp.jwt.verify.issuer")
     String issuer;
 
@@ -24,14 +28,25 @@ public class TokenService {
     Duration refreshTokenDuration;
 
     public String generateAccessToken(Usuario usuario) {
+        Instant now = Instant.now();
+
         String token = Jwt.issuer(issuer)
                 .upn(usuario.getEmail())
                 .groups(new HashSet<>(Arrays.asList(usuario.getRol().split(","))))
-                .claim("userId", usuario.getId().toString())
+                .claim("userId", usuario.getId())  // ✅ Integer directo
                 .claim("nombre", usuario.getNombre())
                 .claim("apellido", usuario.getApellido())
-                .expiresAt(Instant.now().plus(accessTokenDuration))
+                .claim("rol", usuario.getRol())
+                .claim("email", usuario.getEmail())
+                .claim("iat", now.getEpochSecond())
+                .claim("exp", now.plus(accessTokenDuration).getEpochSecond())
+                .claim("aud", "microservices")  // Audiencia para todos los microservicios
+                .expiresAt(now.plus(accessTokenDuration))
                 .sign();
+
+        System.out.println("🎫 Token JWT generado para usuario: " + usuario.getId() +
+                " | Rol: " + usuario.getRol() +
+                " | Expira en: " + accessTokenDuration.toMinutes() + " minutos");
 
         return token;
     }
@@ -46,5 +61,9 @@ public class TokenService {
 
     public Duration getRefreshTokenDuration() {
         return refreshTokenDuration;
+    }
+
+    public String getIssuer() {
+        return issuer;
     }
 }
