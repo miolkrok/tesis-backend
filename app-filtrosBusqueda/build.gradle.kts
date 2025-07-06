@@ -43,9 +43,6 @@ dependencies {
     //HEALTH
     implementation("io.quarkus:quarkus-smallrye-health")
 
-    // Para indexación y búsqueda
-    implementation("io.quarkus:quarkus-hibernate-search-orm-elasticsearch:3.11.1")
-
     // JWT y Seguridad
     implementation("io.quarkus:quarkus-smallrye-jwt")
     implementation("io.quarkus:quarkus-smallrye-jwt-build")

@@ -2,8 +2,6 @@ package com.distribuida.db;
 
 import jakarta.persistence.*;
 import lombok.Data;
-import org.hibernate.search.mapper.pojo.mapping.definition.annotation.FullTextField;
-import org.hibernate.search.mapper.pojo.mapping.definition.annotation.KeywordField;
 
 import java.math.BigDecimal;
 
@@ -20,21 +18,16 @@ public class Busqueda {
     @Column(name="actividad_id")
     private Integer actividadId;
 
-    @FullTextField
     private String titulo;
 
-    @FullTextField
     private String descripcion;
 
-    @KeywordField
     private String ubicacion;
 
-    @KeywordField
     private String categoria;
 
     private BigDecimal precio;
 
-    @KeywordField
     private Integer capacidad;
 
     private String duracion;
@@ -48,7 +41,6 @@ public class Busqueda {
     @Column(name = "proveedor_id")
     private Integer proveedorId;
 
-    @KeywordField
     @Column(name = "nombre_proveedor")
     private String nombreProveedor;
 

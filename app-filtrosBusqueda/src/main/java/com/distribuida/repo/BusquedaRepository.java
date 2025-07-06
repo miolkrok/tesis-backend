@@ -4,9 +4,7 @@ package com.distribuida.repo;
 import com.distribuida.db.Busqueda;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import org.hibernate.search.mapper.orm.session.SearchSession;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -15,72 +13,100 @@ import java.util.List;
 @Transactional
 public class BusquedaRepository implements PanacheRepositoryBase<Busqueda, Integer> {
 
-    @Inject
-    SearchSession searchSession;
-
     public List<Busqueda> buscar(String textoBusqueda) {
-        return searchSession.search(Busqueda.class)
-                .where(f -> f.match()
-                        .fields("titulo", "descripcion", "categoria", "ubicacion", "nombreProveedor")
-                        .matching(textoBusqueda))
-                .fetchHits(20);
+        if (textoBusqueda == null || textoBusqueda.trim().isEmpty()) {
+            return listAll();
+        }
+
+        String searchTerm = "%" + textoBusqueda.toLowerCase() + "%";
+
+        return find("LOWER(titulo) LIKE ?1 OR " +
+                        "LOWER(descripcion) LIKE ?1 OR " +
+                        "LOWER(categoria) LIKE ?1 OR " +
+                        "LOWER(ubicacion) LIKE ?1 OR " +
+                        "LOWER(nombreProveedor) LIKE ?1",
+                searchTerm).list();
     }
 
     public List<Busqueda> buscarPorCategoria(String categoria) {
-        return searchSession.search(Busqueda.class)
-                .where(f -> f.match()
-                        .field("categoria")
-                        .matching(categoria))
-                .fetchHits(20);
+        if (categoria == null || categoria.trim().isEmpty()) {
+            return listAll();
+        }
+        return find("LOWER(categoria) = LOWER(?1)", categoria).list();
     }
 
     public List<Busqueda> buscarPorUbicacion(String ubicacion) {
-        return searchSession.search(Busqueda.class)
-                .where(f -> f.match()
-                        .field("ubicacion")
-                        .matching(ubicacion))
-                .fetchHits(20);
+        if (ubicacion == null || ubicacion.trim().isEmpty()) {
+            return listAll();
+        }
+        return find("LOWER(ubicacion) = LOWER(?1)", ubicacion).list();
     }
 
     public List<Busqueda> buscarConFiltros(String textoBusqueda, String categoria,
                                            String ubicacion, BigDecimal precioMin, BigDecimal precioMax) {
 
-        return searchSession.search(Busqueda.class)
-                .where(f -> {
-                    var bool = f.bool();
+        StringBuilder query = new StringBuilder("1=1");
 
-                    if (textoBusqueda != null && !textoBusqueda.isEmpty()) {
-                        bool.must(f.match()
-                                .fields("titulo", "descripcion", "nombreProveedor")
-                                .matching(textoBusqueda));
-                    }
+        if (textoBusqueda != null && !textoBusqueda.trim().isEmpty()) {
+            query.append(" AND (LOWER(titulo) LIKE ?1 OR LOWER(descripcion) LIKE ?1 OR LOWER(nombreProveedor) LIKE ?1)");
+        }
 
-                    if (categoria != null && !categoria.isEmpty()) {
-                        bool.must(f.match()
-                                .field("categoria")
-                                .matching(categoria));
-                    }
+        if (categoria != null && !categoria.trim().isEmpty()) {
+            query.append(" AND LOWER(categoria) = LOWER(?").append(getNextParamIndex(textoBusqueda, 2)).append(")");
+        }
 
-                    if (ubicacion != null && !ubicacion.isEmpty()) {
-                        bool.must(f.match()
-                                .field("ubicacion")
-                                .matching(ubicacion));
-                    }
+        if (ubicacion != null && !ubicacion.trim().isEmpty()) {
+            query.append(" AND LOWER(ubicacion) = LOWER(?").append(getNextParamIndex(textoBusqueda, categoria, 3)).append(")");
+        }
 
-                    if (precioMin != null) {
-                        bool.must(f.range()
-                                .field("precio")
-                                .greaterThan(precioMin));
-                    }
+        if (precioMin != null) {
+            query.append(" AND precio >= ?").append(getNextParamIndex(textoBusqueda, categoria, ubicacion, 4));
+        }
 
-                    if (precioMax != null) {
-                        bool.must(f.range()
-                                .field("precio")
-                                .lessThan(precioMax));
-                    }
+        if (precioMax != null) {
+            query.append(" AND precio <= ?").append(getNextParamIndex(textoBusqueda, categoria, ubicacion, precioMin, 5));
+        }
 
-                    return bool;
-                })
-                .fetchHits(20);
+        // Construir parámetros dinámicamente
+        Object[] params = buildParams(textoBusqueda, categoria, ubicacion, precioMin, precioMax);
+
+        return find(query.toString(), params).list();
+    }
+
+    private int getNextParamIndex(Object... previousParams) {
+        int index = 1;
+        for (Object param : previousParams) {
+            if (param != null && (!(param instanceof String) || !((String) param).trim().isEmpty())) {
+                index++;
+            }
+        }
+        return index;
+    }
+
+    private Object[] buildParams(String textoBusqueda, String categoria, String ubicacion,
+                                 BigDecimal precioMin, BigDecimal precioMax) {
+        java.util.ArrayList<Object> paramList = new java.util.ArrayList<>();
+
+        if (textoBusqueda != null && !textoBusqueda.trim().isEmpty()) {
+            paramList.add("%" + textoBusqueda.toLowerCase() + "%");
+        }
+
+        if (categoria != null && !categoria.trim().isEmpty()) {
+            paramList.add(categoria);
+        }
+
+        if (ubicacion != null && !ubicacion.trim().isEmpty()) {
+            paramList.add(ubicacion);
+        }
+
+        if (precioMin != null) {
+            paramList.add(precioMin);
+        }
+
+        if (precioMax != null) {
+            paramList.add(precioMax);
+        }
+
+        return paramList.toArray();
     }
 }
