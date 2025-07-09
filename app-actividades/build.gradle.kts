@@ -42,10 +42,16 @@ dependencies {
     //HEALTH
     implementation("io.quarkus:quarkus-smallrye-health")
 
+    // Validación
+    implementation("io.quarkus:quarkus-hibernate-validator")
+
     // JWT y Seguridad
     implementation("io.quarkus:quarkus-smallrye-jwt")
     implementation("io.quarkus:quarkus-smallrye-jwt-build")
     implementation("io.quarkus:quarkus-security-jpa")
+
+    //cache
+    implementation("io.quarkus:quarkus-cache:3.24.2")
 }
 
 tasks.test {

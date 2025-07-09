@@ -3,6 +3,7 @@ package com.distribuida.dtos;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -29,7 +30,25 @@ public class ActividadDTO {
 
     private String duracion;
 
+    //@Type(JsonType.class)
     private String disponibilidad;
+
+    // NUEVOS CAMPOS
+    private LocalDate fechaInicioDisponible;
+
+    private LocalDate fechaFinDisponible;
+
+    private Integer minimoPersonas;
+
+    private String provincia;
+
+    private String ciudad;
+
+    private Double latitud;
+
+    private Double longitud;
+
+    private String estadoActividad;
 
     private LocalDateTime fechaCreacion;
 

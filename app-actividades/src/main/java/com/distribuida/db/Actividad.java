@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.ToString;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -52,6 +53,31 @@ public class Actividad {
 
     @Column(name="fecha_actualizacion")
     private LocalDateTime fechaActualizacion;
+
+    //
+    @Column(name="fecha_inicio_disponible")
+    private LocalDate fechaInicioDisponible;
+
+    @Column(name="fecha_fin_disponible")
+    private LocalDate fechaFinDisponible;
+
+    @Column(name="minimo_personas")
+    private Integer minimoPersonas;
+
+    @Column(name="provincia")
+    private String provincia;
+
+    @Column(name="ciudad")
+    private String ciudad;
+
+    @Column(name="coordenada_lat")
+    private Double latitud;
+
+    @Column(name="coordenada_lng")
+    private Double longitud;
+
+    @Column(name="estado_actividad")
+    private String estadoActividad = "ACTIVA"; // ACTIVA, PAUSADA, INACTIVA
 
     @OneToMany(mappedBy = "actividad", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Galeria> galeria;

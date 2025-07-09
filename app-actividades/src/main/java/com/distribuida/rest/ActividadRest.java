@@ -4,9 +4,7 @@ import com.distribuida.clients.UsuarioRestClient;
 import com.distribuida.db.Actividad;
 import com.distribuida.db.Galeria;
 import com.distribuida.db.ServicioEvento;
-import com.distribuida.dtos.ActividadDTO;
-import com.distribuida.dtos.GaleriaDTO;
-import com.distribuida.dtos.ServicioEventoDTO;
+import com.distribuida.dtos.*;
 import com.distribuida.repo.ActividadRepository;
 import io.quarkus.security.Authenticated;
 import jakarta.annotation.security.PermitAll;
@@ -14,6 +12,7 @@ import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import jakarta.validation.Valid;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
@@ -204,6 +203,209 @@ public class ActividadRest {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Búsqueda principal de actividades
+     */
+    @POST
+    @Path("/buscar")
+    @PermitAll
+    public Response buscarActividades(@Valid BusquedaActividadRequest request) {
+        try {
+            System.out.println("Búsqueda de actividades: " + request);
+
+            List<Actividad> actividades;
+
+            // Determinar tipo de búsqueda
+            if (request.getLatitud() != null && request.getLongitud() != null) {
+                // Búsqueda por proximidad geográfica
+                actividades = actividadRepo.buscarPorProximidad(
+                        request.getLatitud(),
+                        request.getLongitud(),
+                        request.getRadioKm(),
+                        request.getFechaInicio(),
+                        request.getFechaFin(),
+                        request.getCantidadPersonas()
+                );
+            } else {
+                // Búsqueda tradicional
+                actividades = actividadRepo.buscarActividadesDisponibles(
+                        request.getUbicacion(),
+                        request.getFechaInicio(),
+                        request.getFechaFin(),
+                        request.getCantidadPersonas(),
+                        request.getTipoActividad(),
+                        request.getPrecioMinimo(),
+                        request.getPrecioMaximo()
+                );
+            }
+
+            // Aplicar paginación manualmente (o usar Panache pagination)
+            int inicio = request.getPagina() * request.getTamanoPagina();
+            int fin = Math.min(inicio + request.getTamanoPagina(), actividades.size());
+
+            List<Actividad> actividadesPaginadas = actividades.subList(
+                    Math.min(inicio, actividades.size()),
+                    fin
+            );
+
+            // Convertir a DTOs
+            List<ActividadDTO> actividadesDTO = actividadesPaginadas.stream()
+                    .map(this::convertToDTO)
+                    .collect(Collectors.toList());
+
+            // Crear respuesta
+            BusquedaActividadResponse response = new BusquedaActividadResponse();
+            response.setActividades(actividadesDTO);
+            response.setTotalElementos((long) actividades.size());
+            response.setPaginaActual(request.getPagina());
+            response.setElementosPorPagina(request.getTamanoPagina());
+            response.setTotalPaginas((int) Math.ceil((double) actividades.size() / request.getTamanoPagina()));
+            response.setHayMasPaginas(fin < actividades.size());
+
+            // Agregar metadatos
+            response.setProvinciasEncontradas(
+                    actividades.stream()
+                            .map(Actividad::getProvincia)
+                            .filter(p -> p != null && !p.isEmpty())
+                            .distinct()
+                            .collect(Collectors.toList())
+            );
+
+            response.setTiposActividadEncontrados(
+                    actividades.stream()
+                            .map(Actividad::getTipoActividad)
+                            .filter(t -> t != null && !t.isEmpty())
+                            .distinct()
+                            .collect(Collectors.toList())
+            );
+
+            response.setRangosPrecios(actividadRepo.obtenerRangosPrecios());
+
+            return Response.ok(response).build();
+
+        } catch (Exception e) {
+            System.err.println("Error en búsqueda de actividades: " + e.getMessage());
+            e.printStackTrace();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity("Error al buscar actividades: " + e.getMessage())
+                    .build();
+        }
+    }
+
+    /**
+     * Búsqueda rápida por texto
+     */
+    @GET
+    @Path("/busqueda-rapida")
+    @PermitAll
+    public Response busquedaRapida(@QueryParam("q") String texto,
+                                   @QueryParam("limite") @DefaultValue("10") Integer limite) {
+        try {
+            List<Actividad> actividades = actividadRepo.busquedaRapida(texto);
+
+            List<ActividadDTO> actividadesDTO = actividades.stream()
+                    .limit(limite)
+                    .map(this::convertToDTO)
+                    .collect(Collectors.toList());
+
+            return Response.ok(actividadesDTO).build();
+
+        } catch (Exception e) {
+            System.err.println("Error en búsqueda rápida: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * Obtener filtros disponibles para búsqueda
+     */
+    @GET
+    @Path("/filtros")
+    @PermitAll
+    public Response obtenerFiltros() {
+        try {
+            FiltrosBusquedaResponse filtros = new FiltrosBusquedaResponse();
+
+            filtros.setProvincias(actividadRepo.obtenerProvinciasDisponibles());
+            filtros.setTiposActividad(actividadRepo.obtenerTiposActividadDisponibles());
+            filtros.setRangosPrecios(actividadRepo.obtenerRangosPrecios());
+            filtros.setTotalActividades(actividadRepo.count("estadoActividad = 'ACTIVA'"));
+
+            return Response.ok(filtros).build();
+
+        } catch (Exception e) {
+            System.err.println("Error al obtener filtros: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * Obtener actividades populares
+     */
+    @GET
+    @Path("/populares")
+    @PermitAll
+    public Response obtenerActividadesPopulares(@QueryParam("limite") @DefaultValue("10") Integer limite) {
+        try {
+            List<Actividad> actividades = actividadRepo.obtenerActividadesPopulares(limite);
+
+            List<ActividadDTO> actividadesDTO = actividades.stream()
+                    .map(this::convertToDTO)
+                    .collect(Collectors.toList());
+
+            return Response.ok(actividadesDTO).build();
+
+        } catch (Exception e) {
+            System.err.println("Error al obtener actividades populares: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * Sugerencias de búsqueda
+     */
+    @GET
+    @Path("/sugerencias")
+    @PermitAll
+    public Response obtenerSugerencias(@QueryParam("texto") String texto) {
+        try {
+            SugerenciaBusquedaResponse sugerencias = new SugerenciaBusquedaResponse();
+
+            // Sugerencias de ubicación
+            if (texto != null && !texto.trim().isEmpty()) {
+                String searchTerm = "%" + texto.toLowerCase() + "%";
+
+                List<String> ubicaciones = actividadRepo.find(
+                        "SELECT DISTINCT ubicacionDestino FROM Actividad WHERE LOWER(ubicacionDestino) LIKE ?1 AND estadoActividad = 'ACTIVA'",
+                        searchTerm
+                ).project(String.class).list();
+
+                sugerencias.setSugerenciasUbicacion(ubicaciones.stream().limit(5).collect(Collectors.toList()));
+
+                List<String> actividades = actividadRepo.find(
+                        "SELECT DISTINCT tipoActividad FROM Actividad WHERE LOWER(tipoActividad) LIKE ?1 AND estadoActividad = 'ACTIVA'",
+                        searchTerm
+                ).project(String.class).list();
+
+                sugerencias.setSugerenciasActividad(actividades.stream().limit(5).collect(Collectors.toList()));
+            }
+
+            // Actividades populares
+            List<ActividadDTO> populares = actividadRepo.obtenerActividadesPopulares(5)
+                    .stream()
+                    .map(this::convertToDTO)
+                    .collect(Collectors.toList());
+
+            sugerencias.setActividadesPopulares(populares);
+
+            return Response.ok(sugerencias).build();
+
+        } catch (Exception e) {
+            System.err.println("Error al obtener sugerencias: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
     // ===== MÉTODOS AUXILIARES =====
 
     private Integer getUserIdFromJWT() {
@@ -306,6 +508,7 @@ public class ActividadRest {
         dto.setActividadId(servicioEvento.getActividadServicio().getId());
         return dto;
     }
+
 
 }
 

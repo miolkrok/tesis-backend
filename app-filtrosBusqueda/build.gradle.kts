@@ -47,6 +47,9 @@ dependencies {
     implementation("io.quarkus:quarkus-smallrye-jwt")
     implementation("io.quarkus:quarkus-smallrye-jwt-build")
     implementation("io.quarkus:quarkus-security-jpa")
+
+    //Jakart Validation
+    implementation("jakarta.validation:jakarta.validation-api:3.1.1")
 }
 
 tasks.test {
