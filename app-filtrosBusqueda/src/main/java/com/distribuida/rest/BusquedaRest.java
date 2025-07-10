@@ -3,10 +3,10 @@ package com.distribuida.rest;
 import com.distribuida.clients.ActividadRestClient;
 import com.distribuida.clients.OpinionRestClient;
 import com.distribuida.db.Busqueda;
-import com.distribuida.dtos.BusquedaActividadRequestSimple;
-import com.distribuida.dtos.BusquedaActividadResponseSimple;
+import com.distribuida.dtos.*;
 import com.distribuida.repo.BusquedaRepository;
 import com.distribuida.service.CoordenadasService;
+import jakarta.annotation.security.PermitAll;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -19,12 +19,14 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-
+import java.util.stream.Collectors;
 
 
 @Path("/busquedas")
@@ -431,5 +433,338 @@ public class BusquedaRest {
                     .entity(Map.of("error", "Error al obtener estadísticas"))
                     .build();
         }
+    }
+
+    @POST
+    @Path("/busqueda-rapida")
+    @PermitAll
+    public Response busquedaRapida(@Valid BusquedaRapidaRequest request) {
+        try {
+            System.out.println("Búsqueda Ubicación: " + request.getUbicacion() +
+                    " | Fechas: " + request.getFechaInicio() + " a " + request.getFechaFin() +
+                    " | Personas: " + request.getCantidadPersonas());
+
+            // === VALIDACIONES ===
+            if (!request.isValidDateRange()) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(Map.of("error", "Rango de fechas inválido"))
+                        .build();
+            }
+
+            if (!request.isValidPriceRange()) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(Map.of("error", "Rango de precios inválido"))
+                        .build();
+            }
+
+            // GEOCODIFICACION
+            CoordenadasService.Coordenadas coordenadas = null;
+            if (request.getLatitud() == null || request.getLongitud() == null) {
+                coordenadas = coordenadasService.obtenerCoordenadas(request.getUbicacion());
+                request.setLatitud(coordenadas.getLatitud());
+                request.setLongitud(coordenadas.getLongitud());
+            }
+
+            // BUSQUEDA PRINCIPAL
+            List<Busqueda> resultadosBrutos = busquedaRepository.buscarConFiltrosAvanzados(
+                    request.getUbicacion(),
+                    request.getFechaInicio(),
+                    request.getFechaFin(),
+                    request.getCantidadPersonas(),
+                    request.getTipoActividad(),
+                    request.getPrecioMinimo() != null ? BigDecimal.valueOf(request.getPrecioMinimo()) : null,
+                    request.getPrecioMaximo() != null ? BigDecimal.valueOf(request.getPrecioMaximo()) : null,
+                    request.getLatitud(),
+                    request.getLongitud(),
+                    request.getRadioKm()
+            );
+
+            // FILTRAR POR DISPONIBILIDAD ESTRICTA
+            List<Busqueda> resultadosFiltrados = resultadosBrutos.stream()
+                    .filter(actividad -> verificarDisponibilidadCompleta(actividad, request))
+                    .collect(Collectors.toList());
+
+            // ORDENAMIENTO
+            resultadosFiltrados = aplicarOrdenamiento(resultadosFiltrados, request);
+
+            // CREAR RESPUESTA PAGINADA
+            BusquedaRapidaResponse response = crearRespuestaBusqueda(
+                    resultadosFiltrados,
+                    request,
+                    coordenadas
+            );
+
+            System.out.println("Búsqueda completada: " + response.getActividadesEncontradas() +
+                    " actividades encontradas");
+
+            return Response.ok(response).build();
+
+        } catch (Exception e) {
+            System.err.println("Error en búsqueda rápida: " + e.getMessage());
+            e.printStackTrace();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of(
+                            "error", "Error al realizar la búsqueda",
+                            "message", e.getMessage()
+                    ))
+                    .build();
+        }
+    }
+
+//  METODOS AUXILIARES
+
+    private boolean verificarDisponibilidadCompleta(Busqueda actividad, BusquedaRapidaRequest request) {
+        // Verificar fechas disponibles
+        if (actividad.getFechaInicioDisponible() != null &&
+                request.getFechaInicio().isBefore(actividad.getFechaInicioDisponible())) {
+            return false;
+        }
+
+        if (actividad.getFechaFinDisponible() != null &&
+                request.getFechaFin().isAfter(actividad.getFechaFinDisponible())) {
+            return false;
+        }
+
+        // Verificar capacidad
+        if (actividad.getMinimoPersonas() != null &&
+                request.getCantidadPersonas() < actividad.getMinimoPersonas()) {
+            return false;
+        }
+
+        if (actividad.getMaximoPersonas() != null &&
+                request.getCantidadPersonas() > actividad.getMaximoPersonas()) {
+            return false;
+        }
+
+        // Verificar que esté activa
+        return "ACTIVA".equals(actividad.getEstadoActividad());
+    }
+
+    private List<Busqueda> aplicarOrdenamiento(List<Busqueda> resultados, BusquedaRapidaRequest request) {
+        return switch (request.getOrdenarPor()) {
+            case "PRECIO_ASC" -> resultados.stream()
+                    .sorted(Comparator.comparing(Busqueda::getPrecio,
+                            Comparator.nullsLast(Comparator.naturalOrder())))
+                    .collect(Collectors.toList());
+
+            case "PRECIO_DESC" -> resultados.stream()
+                    .sorted(Comparator.comparing(Busqueda::getPrecio,
+                            Comparator.nullsFirst(Comparator.reverseOrder())))
+                    .collect(Collectors.toList());
+
+            case "DISTANCIA" -> resultados.stream()
+                    .filter(r -> r.getLatitud() != null && r.getLongitud() != null)
+                    .sorted((a, b) -> {
+                        double distA = coordenadasService.calcularDistancia(
+                                request.getLatitud(), request.getLongitud(),
+                                a.getLatitud(), a.getLongitud());
+                        double distB = coordenadasService.calcularDistancia(
+                                request.getLatitud(), request.getLongitud(),
+                                b.getLatitud(), b.getLongitud());
+                        return Double.compare(distA, distB);
+                    })
+                    .collect(Collectors.toList());
+
+            default -> resultados.stream() // RELEVANCIA
+                    .sorted(Comparator
+                            .comparing(Busqueda::getPuntuacionPromedio,
+                                    Comparator.nullsLast(Comparator.reverseOrder()))
+                            .thenComparing(Busqueda::getNumeroReservas,
+                                    Comparator.nullsLast(Comparator.reverseOrder())))
+                    .collect(Collectors.toList());
+        };
+    }
+
+    private BusquedaRapidaResponse crearRespuestaBusqueda(
+            List<Busqueda> resultados,
+            BusquedaRapidaRequest request,
+            CoordenadasService.Coordenadas coordenadas) {
+
+        BusquedaRapidaResponse response = new BusquedaRapidaResponse();
+
+        // PAGINACION
+        int inicio = request.getPagina() * request.getTamanoPagina();
+        int fin = Math.min(inicio + request.getTamanoPagina(), resultados.size());
+
+        List<Busqueda> resultadosPaginados = resultados.subList(
+                Math.min(inicio, resultados.size()), fin);
+
+        // CONVERTIR A DTO
+        List<ActividadBusquedaDTO> actividadesDTO = resultadosPaginados.stream()
+                .map(actividad -> convertirAActividadBusquedaDTO(actividad, request))
+                .collect(Collectors.toList());
+
+        response.setActividades(actividadesDTO);
+        response.setTotalElementos(resultados.size());
+        response.setPaginaActual(request.getPagina());
+        response.setElementosPorPagina(request.getTamanoPagina());
+        response.setTotalPaginas((int) Math.ceil((double) resultados.size() / request.getTamanoPagina()));
+        response.setHayMasPaginas(fin < resultados.size());
+
+        // METADATOS
+        response.setUbicacionBuscada(request.getUbicacion());
+        response.setFechaInicio(request.getFechaInicio().toString());
+        response.setFechaFin(request.getFechaFin().toString());
+        response.setCantidadPersonas(request.getCantidadPersonas());
+        response.setDiasActividad(request.getDiasActividad());
+        response.setActividadesEncontradas(resultados.size());
+
+        // === ESTADISTICAS ===
+        if (!resultados.isEmpty()) {
+            double precioPromedio = resultados.stream()
+                    .filter(r -> r.getPrecio() != null)
+                    .mapToDouble(r -> r.getPrecio().doubleValue())
+                    .average()
+                    .orElse(0.0);
+            response.setPrecioPromedio(Math.round(precioPromedio * 100.0) / 100.0);
+
+            // Calcular distancia promedio
+            if (request.getLatitud() != null && request.getLongitud() != null) {
+                double distanciaPromedio = resultados.stream()
+                        .filter(r -> r.getLatitud() != null && r.getLongitud() != null)
+                        .mapToDouble(r -> coordenadasService.calcularDistancia(
+                                request.getLatitud(), request.getLongitud(),
+                                r.getLatitud(), r.getLongitud()))
+                        .average()
+                        .orElse(0.0);
+                response.setDistanciaPromedio(Math.round(distanciaPromedio * 100.0) / 100.0);
+            }
+        }
+
+        // === FILTROS DISPONIBLES ===
+        response.setTiposActividadDisponibles(
+                resultados.stream()
+                        .map(Busqueda::getTipoActividad)
+                        .filter(tipo -> tipo != null && !tipo.isEmpty())
+                        .distinct()
+                        .collect(Collectors.toList())
+        );
+
+        response.setProvinciasCercanas(
+                resultados.stream()
+                        .map(Busqueda::getProvincia)
+                        .filter(prov -> prov != null && !prov.isEmpty())
+                        .distinct()
+                        .limit(5)
+                        .collect(Collectors.toList())
+        );
+
+        // === RANGOS DE PRECIOS ===
+        if (!resultados.isEmpty()) {
+            List<BigDecimal> precios = resultados.stream()
+                    .map(Busqueda::getPrecio)
+                    .filter(precio -> precio != null)
+                    .collect(Collectors.toList());
+
+            if (!precios.isEmpty()) {
+                response.setRangosPrecios(Map.of(
+                        "minimo", precios.stream().min(BigDecimal::compareTo).orElse(BigDecimal.ZERO),
+                        "maximo", precios.stream().max(BigDecimal::compareTo).orElse(BigDecimal.ZERO),
+                        "promedio", response.getPrecioPromedio()
+                ));
+            }
+        }
+
+        // === SUGERENCIAS ===
+        response.setSugerenciasUbicacion(
+                coordenadasService.obtenerSugerenciasUbicacion(request.getUbicacion())
+                        .stream()
+                        .map(CoordenadasService.UbicacionSugerencia::getNombre)
+                        .limit(3)
+                        .collect(Collectors.toList())
+        );
+
+        return response;
+    }
+
+    private ActividadBusquedaDTO convertirAActividadBusquedaDTO(Busqueda actividad, BusquedaRapidaRequest request) {
+        ActividadBusquedaDTO dto = new ActividadBusquedaDTO();
+
+        // Información básica
+        dto.setId(actividad.getActividadId());
+        dto.setTitulo(actividad.getTitulo());
+        dto.setDescripcion(actividad.getDescripcion());
+
+        // Ubicación
+        dto.setUbicacionDestino(actividad.getUbicacion());
+        dto.setProvincia(actividad.getProvincia());
+        dto.setCiudad(actividad.getCiudad());
+        dto.setLatitud(actividad.getLatitud());
+        dto.setLongitud(actividad.getLongitud());
+
+        // Calcular distancia si tenemos coordenadas
+        if (request.getLatitud() != null && request.getLongitud() != null &&
+                actividad.getLatitud() != null && actividad.getLongitud() != null) {
+            double distancia = coordenadasService.calcularDistancia(
+                    request.getLatitud(), request.getLongitud(),
+                    actividad.getLatitud(), actividad.getLongitud()
+            );
+            dto.setDistanciaKm(Math.round(distancia * 100.0) / 100.0);
+        }
+
+        // Precio
+        dto.setPrecio(actividad.getPrecio() != null ? actividad.getPrecio().doubleValue() : null);
+        if (dto.getPrecio() != null) {
+            dto.setPrecioTotal(dto.getPrecio() * request.getCantidadPersonas() * request.getDiasActividad());
+        }
+
+        // Disponibilidad
+        dto.setDisponible(verificarDisponibilidadCompleta(actividad, request));
+        if (!dto.getDisponible()) {
+            dto.setMotivoNoDisponible(determinarMotivoNoDisponible(actividad, request));
+        }
+
+        // Características
+        dto.setTipoActividad(actividad.getTipoActividad());
+        dto.setNivelDificultad(actividad.getNivelDificultad());
+        dto.setDuracion(actividad.getDuracion());
+        dto.setMinimoPersonas(actividad.getMinimoPersonas());
+        dto.setMaximoPersonas(actividad.getMaximoPersonas());
+
+        // Calificaciones
+        dto.setPuntuacionPromedio(actividad.getPuntuacionPromedio());
+        dto.setNumeroResenias(actividad.getNumeroOpiniones());
+        dto.setNumeroReservas(actividad.getNumeroReservas());
+
+        // Proveedor
+        dto.setNombreProveedor(actividad.getNombreProveedor());
+
+        // Etiquetas útiles
+        List<String> etiquetas = new ArrayList<>();
+        if (actividad.getNumeroReservas() != null && actividad.getNumeroReservas() > 10) {
+            etiquetas.add("Popular");
+        }
+        if (actividad.getPuntuacionPromedio() != null && actividad.getPuntuacionPromedio() >= 4.5) {
+            etiquetas.add("Excelente valoración");
+        }
+        if (request.getCantidadPersonas() >= (actividad.getMinimoPersonas() != null ? actividad.getMinimoPersonas() : 1)) {
+            etiquetas.add("Perfecto para grupos");
+        }
+        dto.setEtiquetas(etiquetas);
+
+        // Características adicionales
+        dto.setCancelacionGratuita(true); // Por defecto, puedes implementar lógica específica
+        dto.setConfirmacionInmediata(true);
+
+        return dto;
+    }
+
+    private String determinarMotivoNoDisponible(Busqueda actividad, BusquedaRapidaRequest request) {
+        if (actividad.getFechaInicioDisponible() != null &&
+                request.getFechaInicio().isBefore(actividad.getFechaInicioDisponible())) {
+            return "No disponible para las fechas seleccionadas";
+        }
+
+        if (actividad.getMinimoPersonas() != null &&
+                request.getCantidadPersonas() < actividad.getMinimoPersonas()) {
+            return "Requiere mínimo " + actividad.getMinimoPersonas() + " personas";
+        }
+
+        if (actividad.getMaximoPersonas() != null &&
+                request.getCantidadPersonas() > actividad.getMaximoPersonas()) {
+            return "Excede capacidad máxima de " + actividad.getMaximoPersonas() + " personas";
+        }
+
+        return "No disponible";
     }
 }
