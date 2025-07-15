@@ -1,5 +1,6 @@
 package com.distribuida.rest;
 
+import com.distribuida.clients.BusquedaRestClient;
 import com.distribuida.clients.UsuarioRestClient;
 import com.distribuida.db.Actividad;
 import com.distribuida.db.Galeria;
@@ -42,6 +43,10 @@ public class ActividadRest {
     @Inject
     JsonWebToken jwt;
 
+    @Inject
+    @RestClient
+    BusquedaRestClient busquedaRestClient;
+
     @GET
     @PermitAll  // Público para permitir búsqueda sin login
     public List<ActividadDTO> findAll() {
@@ -73,7 +78,7 @@ public class ActividadRest {
     }
 
     @POST
-    @RolesAllowed({"PROVEEDOR", "ADMIN"})  // Solo proveedores pueden crear actividades
+    @RolesAllowed({"PROVEEDOR", "ADMIN"})
     public Response create(Actividad actividad) {
         try {
             Integer userId = getUserIdFromJWT();
@@ -82,11 +87,8 @@ public class ActividadRest {
             System.out.println("Creando actividad para usuario: " + userId + " | Rol: " + userRole);
 
             actividad.setId(null);
-
-            // Asignar automáticamente el usuario del JWT
             actividad.setUsuarioId(userId);
 
-            // Establecer fechas automáticamente
             if (actividad.getFechaCreacion() == null) {
                 actividad.setFechaCreacion(LocalDateTime.now());
             }
@@ -94,7 +96,7 @@ public class ActividadRest {
                 actividad.setFechaActualizacion(LocalDateTime.now());
             }
 
-            // Manejar galería si existe
+            // Manejar galería y servicios...
             if (actividad.getGaleria() != null) {
                 for (Galeria galeria : actividad.getGaleria()) {
                     galeria.setId(null);
@@ -102,7 +104,6 @@ public class ActividadRest {
                 }
             }
 
-            // Manejar servicios evento si existe
             if (actividad.getServicioEvento() != null) {
                 for (ServicioEvento servicio : actividad.getServicioEvento()) {
                     servicio.setId(null);
@@ -110,8 +111,17 @@ public class ActividadRest {
                 }
             }
 
+            //Guardar en la base de datos principal
             actividadRepo.persist(actividad);
             System.out.println("Actividad creada exitosamente con ID: " + actividad.getId());
+
+            // Sincronizar con el módulo de búsqueda
+            try {
+                sincronizarConBusqueda(actividad, "CREATE");
+            } catch (Exception e) {
+                System.err.println("Error al sincronizar con búsqueda: " + e.getMessage());
+                // No fallar la creación si la sincronización falla
+            }
 
             return Response.status(Response.Status.CREATED).entity(convertToDTO(actividad)).build();
         } catch (Exception e) {
@@ -121,6 +131,7 @@ public class ActividadRest {
                     .entity("Error al crear actividad: " + e.getMessage()).build();
         }
     }
+
 
     @PUT
     @Path("/{id}")
@@ -133,7 +144,7 @@ public class ActividadRest {
                 return Response.status(Response.Status.NOT_FOUND).build();
             }
 
-            // Verificar permisos: solo el propietario o ADMIN pueden actualizar
+            // Verificar permisos
             if (!securityContext.isUserInRole("ADMIN")) {
                 Integer userId = getUserIdFromJWT();
                 if (!obj.getUsuarioId().equals(userId)) {
@@ -143,6 +154,7 @@ public class ActividadRest {
                 }
             }
 
+            // Actualizar campos
             obj.setTitulo(actividad.getTitulo());
             obj.setDescripcion(actividad.getDescripcion());
             obj.setUbicacionDestino(actividad.getUbicacionDestino());
@@ -154,12 +166,23 @@ public class ActividadRest {
             obj.setDisponibilidad(actividad.getDisponibilidad());
             obj.setFechaActualizacion(LocalDateTime.now());
 
+            //Actualizar en la base principal
+            actividadRepo.persist(obj);
+
+            //Sincronizar con búsqueda
+            try {
+                sincronizarConBusqueda(obj, "UPDATE");
+            } catch (Exception e) {
+                System.err.println("Error al sincronizar actualización con búsqueda: " + e.getMessage());
+            }
+
             return Response.ok(convertToDTO(obj)).build();
         } catch (Exception e) {
             System.err.println("Error al actualizar actividad: " + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
         }
     }
+
 
     @DELETE
     @Path("/{id}")
@@ -171,7 +194,7 @@ public class ActividadRest {
                 return Response.status(Response.Status.NOT_FOUND).build();
             }
 
-            // Verificar permisos: solo el propietario o ADMIN pueden eliminar
+            // Verificar permisos
             if (!securityContext.isUserInRole("ADMIN")) {
                 Integer userId = getUserIdFromJWT();
                 if (!actividad.getUsuarioId().equals(userId)) {
@@ -181,14 +204,76 @@ public class ActividadRest {
                 }
             }
 
+            //Eliminar de la base principal
             boolean deleted = actividadRepo.deleteById(id);
             if (!deleted) {
                 return Response.status(Response.Status.NOT_FOUND).build();
             }
+
+            //Sincronizar eliminación con búsqueda
+            try {
+                busquedaRestClient.eliminarDeBusqueda(id);
+            } catch (Exception e) {
+                System.err.println("Error al eliminar de búsqueda: " + e.getMessage());
+            }
+
             return Response.ok().build();
         } catch (Exception e) {
             System.err.println("Error al eliminar actividad: " + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    private void sincronizarConBusqueda(Actividad actividad, String operacion) {
+        try {
+            // Crear el DTO para el módulo de búsqueda
+            BusquedaActividadDTO busquedaDTO = new BusquedaActividadDTO();
+            busquedaDTO.setActividadId(actividad.getId());
+            busquedaDTO.setTitulo(actividad.getTitulo());
+            busquedaDTO.setDescripcion(actividad.getDescripcion());
+            busquedaDTO.setUbicacion(actividad.getUbicacionDestino());
+            busquedaDTO.setCategoria(actividad.getTipoActividad());
+            busquedaDTO.setPrecio(actividad.getPrecio());
+            busquedaDTO.setDuracion(actividad.getDuracion());
+            busquedaDTO.setTipoActividad(actividad.getTipoActividad());
+            busquedaDTO.setNivelDificultad(actividad.getNivelDificultad());
+            busquedaDTO.setProveedorId(actividad.getUsuarioId());
+            busquedaDTO.setProvincia(actividad.getProvincia());
+            busquedaDTO.setCiudad(actividad.getCiudad());
+            busquedaDTO.setFechaInicioDisponible(actividad.getFechaInicioDisponible());
+            busquedaDTO.setFechaFinDisponible(actividad.getFechaFinDisponible());
+            busquedaDTO.setMinimoPersonas(actividad.getMinimoPersonas());
+            busquedaDTO.setMaximoPersonas(actividad.getMaximoPersonas());
+            busquedaDTO.setLatitud(actividad.getLatitud());
+            busquedaDTO.setLongitud(actividad.getLongitud());
+            busquedaDTO.setEstadoActividad(actividad.getEstadoActividad());
+            busquedaDTO.setFechaIndexacion(LocalDateTime.now());
+
+            // Obtener información del proveedor
+            try {
+                var usuario = usuarioRestClient.findById(actividad.getUsuarioId());
+                if (usuario.getProveedor() != null) {
+                    busquedaDTO.setNombreProveedor(usuario.getProveedor().getNombreEmpresa());
+                }
+            } catch (Exception e) {
+                System.err.println("Error al obtener info del proveedor: " + e.getMessage());
+            }
+
+            // Enviar al módulo de búsqueda
+            switch (operacion) {
+                case "CREATE":
+                    busquedaRestClient.indexarActividad(busquedaDTO);
+                    break;
+                case "UPDATE":
+                    busquedaRestClient.actualizarIndice(actividad.getId(), busquedaDTO);
+                    break;
+            }
+
+            System.out.println(" Actividad sincronizada con búsqueda: " + operacion + " - ID: " + actividad.getId());
+
+        } catch (Exception e) {
+            System.err.println(" Error en sincronización con búsqueda: " + e.getMessage());
+            throw e; // Re-lanzar para que el caller maneje el error
         }
     }
 

@@ -7,6 +7,7 @@ import com.distribuida.dtos.*;
 import com.distribuida.repo.BusquedaRepository;
 import com.distribuida.service.CoordenadasService;
 import jakarta.annotation.security.PermitAll;
+import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -766,5 +767,194 @@ public class BusquedaRest {
         }
 
         return "No disponible";
+    }
+
+    /**
+     * Endpoint para indexar nueva actividad desde el módulo de actividades
+     */
+    @POST
+    @Path("/indexar")
+    @RolesAllowed({"PROVEEDOR", "ADMIN"})
+    public Response indexarActividad(BusquedaActividadDTO actividadDTO) {
+        try {
+            System.out.println("Indexando nueva actividad: " + actividadDTO.getActividadId());
+
+            // Convertir DTO a entidad Busqueda
+            Busqueda busqueda = new Busqueda();
+            mapearDTOaBusqueda(actividadDTO, busqueda);
+
+            // Persistir en base de búsqueda
+            busquedaRepository.persist(busqueda);
+
+            System.out.println("Actividad indexada exitosamente: " + actividadDTO.getActividadId());
+            return Response.status(Response.Status.CREATED)
+                    .entity(Map.of("message", "Actividad indexada exitosamente"))
+                    .build();
+
+        } catch (Exception e) {
+            System.err.println(" Error al indexar actividad: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of("error", "Error al indexar actividad"))
+                    .build();
+        }
+    }
+
+    /**
+     * Endpoint para actualizar índice existente
+     */
+    @PUT
+    @Path("/indexar/{actividadId}")
+    @RolesAllowed({"PROVEEDOR", "ADMIN"})
+    public Response actualizarIndice(@PathParam("actividadId") Integer actividadId,
+                                     BusquedaActividadDTO actividadDTO) {
+        try {
+            System.out.println("Actualizando índice para actividad: " + actividadId);
+
+            // Buscar registro existente
+            Busqueda busqueda = busquedaRepository.find("actividadId", actividadId)
+                    .firstResultOptional()
+                    .orElse(new Busqueda());
+
+            // Actualizar datos
+            mapearDTOaBusqueda(actividadDTO, busqueda);
+            busqueda.setFechaIndexacion(LocalDateTime.now());
+
+            // Persistir cambios
+            busquedaRepository.persist(busqueda);
+
+            System.out.println("indice actualizado exitosamente: " + actividadId);
+            return Response.ok(Map.of("message", "indice actualizado exitosamente")).build();
+
+        } catch (Exception e) {
+            System.err.println(" Error al actualizar índice: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of("error", "Error al actualizar índice"))
+                    .build();
+        }
+    }
+
+    /**
+     * Endpoint para eliminar de índice
+     */
+    @DELETE
+    @Path("/indexar/{actividadId}")
+    @RolesAllowed({"PROVEEDOR", "ADMIN"})
+    public Response eliminarDeBusqueda(@PathParam("actividadId") Integer actividadId) {
+        try {
+            System.out.println("Eliminando de índice actividad: " + actividadId);
+
+            // Eliminar todos los registros con esa actividad
+            long eliminados = busquedaRepository.delete("actividadId", actividadId);
+
+            System.out.println(" Registros eliminados del índice: " + eliminados);
+            return Response.ok(Map.of(
+                    "message", "Actividad eliminada del índice",
+                    "registrosEliminados", eliminados
+            )).build();
+
+        } catch (Exception e) {
+            System.err.println("Error al eliminar de índice: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of("error", "Error al eliminar de índice"))
+                    .build();
+        }
+    }
+
+    /**
+     * Reindexar todas las actividades desde el módulo principal
+     */
+    @POST
+    @Path("/reindexar")
+    @RolesAllowed({"ADMIN"})
+    public Response reindexarTodo() {
+        try {
+            System.out.println("Iniciando reindexación completa...");
+
+            // Limpiar índice actual
+            busquedaRepository.deleteAll();
+
+            // Obtener todas las actividades del módulo principal
+            var actividades = actividadRestClient.findAll();
+            int indexadas = 0;
+            int errores = 0;
+
+            for (var actividad : actividades) {
+                try {
+                    // Crear registro de búsqueda
+                    Busqueda busqueda = new Busqueda();
+                    busqueda.setActividadId(actividad.getId());
+                    busqueda.setTitulo(actividad.getTitulo());
+                    busqueda.setDescripcion(actividad.getDescripcion());
+                    busqueda.setUbicacion(actividad.getUbicacionDestino());
+                    busqueda.setCategoria(actividad.getTipoActividad());
+                    busqueda.setPrecio(actividad.getPrecio());
+                    busqueda.setDuracion(actividad.getDuracion());
+                    busqueda.setTipoActividad(actividad.getTipoActividad());
+                    busqueda.setNivelDificultad(actividad.getNivelDificultad());
+                    busqueda.setProveedorId(actividad.getProveedorId());
+                    busqueda.setProvincia(actividad.getProvincia());
+                    busqueda.setCiudad(actividad.getCiudad());
+                    busqueda.setFechaInicioDisponible(actividad.getFechaInicioDisponible());
+                    busqueda.setFechaFinDisponible(actividad.getFechaFinDisponible());
+                    busqueda.setMinimoPersonas(actividad.getMinimoPersonas());
+                    busqueda.setMaximoPersonas(actividad.getMaximoPersonas());
+                    busqueda.setLatitud(actividad.getLatitud());
+                    busqueda.setLongitud(actividad.getLongitud());
+                    busqueda.setEstadoActividad(actividad.getEstadoActividad());
+                    busqueda.setFechaIndexacion(LocalDateTime.now());
+
+                    busquedaRepository.persist(busqueda);
+                    indexadas++;
+
+                } catch (Exception e) {
+                    errores++;
+                    System.err.println("Error indexando actividad ID: " + actividad.getId() + ": " + e.getMessage());
+                }
+            }
+
+            System.out.println(" Reindexación completada: " + indexadas + " exitosas, " + errores + " errores");
+
+            return Response.ok(Map.of(
+                    "message", "Reindexación completada",
+                    "actividadesIndexadas", indexadas,
+                    "errores", errores
+            )).build();
+
+        } catch (Exception e) {
+            System.err.println(" Error en reindexación: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of("error", "Error en reindexación"))
+                    .build();
+        }
+    }
+
+    /**
+     * Método auxiliar para mapear DTO a entidad Busqueda
+     */
+    private void mapearDTOaBusqueda(BusquedaActividadDTO dto, Busqueda busqueda) {
+        busqueda.setActividadId(dto.getActividadId());
+        busqueda.setTitulo(dto.getTitulo());
+        busqueda.setDescripcion(dto.getDescripcion());
+        busqueda.setUbicacion(dto.getUbicacion());
+        busqueda.setCategoria(dto.getCategoria());
+        busqueda.setPrecio(dto.getPrecio()); //!= null ? BigDecimal.valueOf(dto.getPrecio().byteValueExact()) : null);
+        busqueda.setDuracion(dto.getDuracion());
+        busqueda.setTipoActividad(dto.getTipoActividad());
+        busqueda.setNivelDificultad(dto.getNivelDificultad());
+        busqueda.setProveedorId(dto.getProveedorId());
+        busqueda.setNombreProveedor(dto.getNombreProveedor());
+        busqueda.setProvincia(dto.getProvincia());
+        busqueda.setCiudad(dto.getCiudad());
+        busqueda.setFechaInicioDisponible(dto.getFechaInicioDisponible());
+        busqueda.setFechaFinDisponible(dto.getFechaFinDisponible());
+        busqueda.setMinimoPersonas(dto.getMinimoPersonas());
+        busqueda.setMaximoPersonas(dto.getMaximoPersonas());
+        busqueda.setLatitud(dto.getLatitud());
+        busqueda.setLongitud(dto.getLongitud());
+        busqueda.setEstadoActividad(dto.getEstadoActividad());
+        busqueda.setFechaIndexacion(LocalDateTime.now());
+        busqueda.setPuntuacionPromedio(0.0); // Valor por defecto
+        busqueda.setNumeroReservas(0);
+        busqueda.setNumeroOpiniones(0);
     }
 }

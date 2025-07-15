@@ -125,6 +125,8 @@ public class AuthRest {
                 jwt.getName(),
                 jwt.getClaim("nombre"),
                 jwt.getClaim("apellido"),
+                jwt.getClaim("direccion"),
+                jwt.getClaim("imagenPerfil"),
                 jwt.getGroups()
         )).build();
 
@@ -144,6 +146,8 @@ class UserInfoResponse {
     private String email;
     private String nombre;
     private String apellido;
+    private String direccion;
+    private String imagenPerfil;
     private Set<String> roles;
 }
 
