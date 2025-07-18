@@ -13,7 +13,6 @@ repositories {
 
 val quarkusVersion = "3.11.1"
 dependencies {
-    //Evita poner la version en las siguientes dependencias
     implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:${quarkusVersion}"))
     implementation("io.quarkus:quarkus-arc") //Implementacion de CDI de quarkus (Motor de comp de negocio)
     implementation("io.quarkus:quarkus-resteasy-reactive") //Motor de rest JAXRS en su forma reactiva
@@ -52,6 +51,7 @@ dependencies {
 
     //cache
     implementation("io.quarkus:quarkus-cache:3.24.2")
+
 }
 
 tasks.test {

@@ -1,6 +1,7 @@
 package com.distribuida.rest;
 
 import com.distribuida.clients.ActividadRestClient;
+import com.distribuida.clients.GaleriaRestClient;
 import com.distribuida.clients.OpinionRestClient;
 import com.distribuida.db.Busqueda;
 import com.distribuida.dtos.*;
@@ -43,6 +44,11 @@ public class BusquedaRest {
     @Inject
     @RestClient
     ActividadRestClient actividadRestClient;
+
+    @Inject
+    @RestClient
+    GaleriaRestClient galeriaRestClient;
+
 
     @Inject
     @RestClient
@@ -208,16 +214,110 @@ public class BusquedaRest {
         }
     }
 
+    // Reemplazar el método busquedaRapida existente con este:
+    @POST
+    @Path("/busqueda-rapida-mejorada")
+    @PermitAll
+    public Response busquedaRapidaMejorada(@Valid BusquedaRapidaRequest request) {
+        try {
+            System.out.println("Busqueda Mejorada - Ubicación: " + request.getUbicacion() +
+                    " | Fechas: " + request.getFechaInicio() + " a " + request.getFechaFin() +
+                    " | Personas: " + request.getCantidadPersonas());
+
+            // === VALIDACIONES ===
+            if (!request.isValidDateRange()) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(Map.of("error", "Rango de fechas invalido"))
+                        .build();
+            }
+
+            if (!request.isValidPriceRange()) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(Map.of("error", "Rango de precios invalido"))
+                        .build();
+            }
+
+            // GEOCODIFICACION
+            CoordenadasService.Coordenadas coordenadas = null;
+            if (request.getLatitud() == null || request.getLongitud() == null) {
+                coordenadas = coordenadasService.obtenerCoordenadas(request.getUbicacion());
+                request.setLatitud(coordenadas.getLatitud());
+                request.setLongitud(coordenadas.getLongitud());
+            }
+
+            // BUSQUEDA PRINCIPAL
+            List<Busqueda> resultadosBrutos = busquedaRepository.buscarConFiltrosAvanzados(
+                    request.getUbicacion(),
+                    request.getFechaInicio(),
+                    request.getFechaFin(),
+                    request.getCantidadPersonas(),
+                    request.getTipoActividad(),
+                    request.getPrecioMinimo() != null ? BigDecimal.valueOf(request.getPrecioMinimo()) : null,
+                    request.getPrecioMaximo() != null ? BigDecimal.valueOf(request.getPrecioMaximo()) : null,
+                    request.getLatitud(),
+                    request.getLongitud(),
+                    request.getRadioKm()
+            );
+
+            // FILTRAR POR DISPONIBILIDAD ESTRICTA
+            List<Busqueda> resultadosFiltrados = resultadosBrutos.stream()
+                    .filter(actividad -> verificarDisponibilidadCompleta(actividad, request))
+                    .collect(Collectors.toList());
+
+            // ORDENAMIENTO
+            resultadosFiltrados = aplicarOrdenamiento(resultadosFiltrados, request);
+
+            // CONVERTIR A RESULTADOS MEJORADOS
+            List<BusquedaRapidaResultDTO> resultadosMejorados = convertirAResultadosMejorados(
+                    resultadosFiltrados, request);
+
+            // APLICAR PAGINACIÓN
+            int inicio = request.getPagina() * request.getTamanoPagina();
+            int fin = Math.min(inicio + request.getTamanoPagina(), resultadosMejorados.size());
+
+            List<BusquedaRapidaResultDTO> resultadosPaginados = resultadosMejorados.subList(
+                    Math.min(inicio, resultadosMejorados.size()), fin);
+
+            // CREAR RESPUESTA
+            Map<String, Object> response = Map.of(
+                    "actividades", resultadosPaginados,
+                    "totalElementos", resultadosMejorados.size(),
+                    "paginaActual", request.getPagina(),
+                    "elementosPorPagina", request.getTamanoPagina(),
+                    "totalPaginas", (int) Math.ceil((double) resultadosMejorados.size() / request.getTamanoPagina()),
+                    "hayMasPaginas", fin < resultadosMejorados.size(),
+                    "ubicacionBuscada", request.getUbicacion(),
+                    "cantidadPersonas", request.getCantidadPersonas(),
+                    "diasActividad", request.getDiasActividad()
+            );
+
+            System.out.println("✅ Búsqueda completada: " + resultadosMejorados.size() +
+                    " actividades encontradas con imagenes y ratings");
+
+            return Response.ok(response).build();
+
+        } catch (Exception e) {
+            System.err.println("Error en busqueda rapida mejorada: " + e.getMessage());
+            e.printStackTrace();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of(
+                            "error", "Error al realizar la busqueda",
+                            "message", e.getMessage()
+                    ))
+                    .build();
+        }
+    }
+
     // ===== MÉTODOS PRIVADOS DE APOYO =====
 
     private void registrarBusqueda(BusquedaActividadRequestSimple request) {
         try {
             // Aquí podrías guardar el historial de búsquedas para analytics
-            System.out.println("Registrando búsqueda: " + request.getUbicacion() +
+            System.out.println("Registrando busqueda: " + request.getUbicacion() +
                     " - Personas: " + request.getCantidadPersonas() +
                     " - Fechas: " + request.getFechaInicio() + " a " + request.getFechaFin());
         } catch (Exception e) {
-            System.err.println("Error registrando búsqueda: " + e.getMessage());
+            System.err.println("Error registrando busqueda: " + e.getMessage());
         }
     }
 
@@ -309,7 +409,7 @@ public class BusquedaRest {
     @Transactional
     public void actualizarIndices() {
         try {
-            System.out.println("Iniciando actualización de índices de búsqueda...");
+            System.out.println("Iniciando actualizacion de indices de busqueda...");
 
             var actividades = actividadRestClient.findAll();
             int indexadas = 0;
@@ -362,10 +462,10 @@ public class BusquedaRest {
                 }
             }
 
-            System.out.println("Indexación completada: " + indexadas + " exitosas, " + errores + " errores");
+            System.out.println("Indexacion completada: " + indexadas + " exitosas, " + errores + " errores");
 
         } catch (Exception e) {
-            System.err.println("Error general en indexación: " + e.getMessage());
+            System.err.println("Error general en indexacion: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -398,13 +498,13 @@ public class BusquedaRest {
         try {
             actualizarIndices();
             return Response.ok(Map.of(
-                    "mensaje", "Indexación completada exitosamente",
+                    "mensaje", "Indexacion completada exitosamente",
                     "timestamp", System.currentTimeMillis()
             )).build();
         } catch (Exception e) {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                     .entity(Map.of(
-                            "error", "Error durante la indexación",
+                            "error", "Error durante la indexacion",
                             "detalle", e.getMessage()
                     )).build();
         }
@@ -431,7 +531,7 @@ public class BusquedaRest {
             )).build();
         } catch (Exception e) {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(Map.of("error", "Error al obtener estadísticas"))
+                    .entity(Map.of("error", "Error al obtener estadisticas"))
                     .build();
         }
     }
@@ -441,20 +541,20 @@ public class BusquedaRest {
     @PermitAll
     public Response busquedaRapida(@Valid BusquedaRapidaRequest request) {
         try {
-            System.out.println("Búsqueda Ubicación: " + request.getUbicacion() +
+            System.out.println("Busqueda Ubicacion: " + request.getUbicacion() +
                     " | Fechas: " + request.getFechaInicio() + " a " + request.getFechaFin() +
                     " | Personas: " + request.getCantidadPersonas());
 
             // === VALIDACIONES ===
             if (!request.isValidDateRange()) {
                 return Response.status(Response.Status.BAD_REQUEST)
-                        .entity(Map.of("error", "Rango de fechas inválido"))
+                        .entity(Map.of("error", "Rango de fechas invalido"))
                         .build();
             }
 
             if (!request.isValidPriceRange()) {
                 return Response.status(Response.Status.BAD_REQUEST)
-                        .entity(Map.of("error", "Rango de precios inválido"))
+                        .entity(Map.of("error", "Rango de precios invalido"))
                         .build();
             }
 
@@ -495,17 +595,17 @@ public class BusquedaRest {
                     coordenadas
             );
 
-            System.out.println("Búsqueda completada: " + response.getActividadesEncontradas() +
+            System.out.println("Busqueda completada: " + response.getActividadesEncontradas() +
                     " actividades encontradas");
 
             return Response.ok(response).build();
 
         } catch (Exception e) {
-            System.err.println("Error en búsqueda rápida: " + e.getMessage());
+            System.err.println("Error en busqueda rápida: " + e.getMessage());
             e.printStackTrace();
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                     .entity(Map.of(
-                            "error", "Error al realizar la búsqueda",
+                            "error", "Error al realizar la busqueda",
                             "message", e.getMessage()
                     ))
                     .build();
@@ -678,15 +778,119 @@ public class BusquedaRest {
         return response;
     }
 
+    private List<BusquedaRapidaResultDTO> convertirAResultadosMejorados(
+            List<Busqueda> actividades, BusquedaRapidaRequest request) {
+
+        return actividades.parallelStream()
+                .map(actividad -> {
+                    BusquedaRapidaResultDTO resultado = new BusquedaRapidaResultDTO();
+
+                    // Información básica
+                    resultado.setId(actividad.getActividadId());
+                    resultado.setTitulo(actividad.getTitulo());
+                    resultado.setPrecio(actividad.getPrecio());
+                    resultado.setUbicacionDestino(actividad.getUbicacion());
+                    resultado.setTipoActividad(actividad.getTipoActividad());
+                    resultado.setDuracion(actividad.getDuracion());
+                    resultado.setMinimoPersonas(actividad.getMinimoPersonas());
+                    resultado.setMaximoPersonas(actividad.getMaximoPersonas());
+
+                    // Calcular distancia si hay coordenadas
+                    if (request.getLatitud() != null && request.getLongitud() != null &&
+                            actividad.getLatitud() != null && actividad.getLongitud() != null) {
+                        double distancia = coordenadasService.calcularDistancia(
+                                request.getLatitud(), request.getLongitud(),
+                                actividad.getLatitud(), actividad.getLongitud()
+                        );
+                        resultado.setDistanciaKm(Math.round(distancia * 100.0) / 100.0);
+                    }
+
+                    // Obtener rating promedio de opiniones
+                    try {
+                        var responseOpinion = opinionRestClient.getPromedioPuntuacion(actividad.getActividadId());
+                        if (responseOpinion.getStatus() == 200) {
+                            Map<String, Object> opinionData = responseOpinion.readEntity(Map.class);
+                            Object promedio = opinionData.get("promedioPuntuacion");
+                            Object total = opinionData.get("totalOpiniones");
+
+                            if (promedio instanceof Number) {
+                                resultado.setRating(((Number) promedio).doubleValue());
+                            }
+                            if (total instanceof Number) {
+                                resultado.setTotalOpiniones(((Number) total).intValue());
+                            }
+                        } else {
+                            resultado.setRating(0.0);
+                            resultado.setTotalOpiniones(0);
+                        }
+                    } catch (Exception e) {
+                        System.err.println("Error al obtener rating para actividad " +
+                                actividad.getActividadId() + ": " + e.getMessage());
+                        resultado.setRating(0.0);
+                        resultado.setTotalOpiniones(0);
+                    }
+
+                    // Obtener imágenes de la actividad
+                    try {
+                        // Obtener imagen principal
+                        var responseImagenPrincipal = galeriaRestClient.getImagenPrincipal(actividad.getActividadId());
+                        if (responseImagenPrincipal.getStatus() == 200) {
+                            GaleriaDTO imagenPrincipal = responseImagenPrincipal.readEntity(GaleriaDTO.class);
+                            if (imagenPrincipal != null) {
+                                BusquedaRapidaResultDTO.ImagenActividadDTO imgDTO =
+                                        new BusquedaRapidaResultDTO.ImagenActividadDTO();
+                                imgDTO.setId(imagenPrincipal.getId());
+                                imgDTO.setImagenBase64(imagenPrincipal.getImagenBase64());
+                                imgDTO.setNombreArchivo(imagenPrincipal.getNombreArchivo());
+                                imgDTO.setTipoContenido(imagenPrincipal.getTipoContenido());
+                                imgDTO.setEsImagenPrincipal(true);
+                                resultado.setImagenPrincipal(imgDTO);
+                            }
+                        }
+
+                        // Obtener todas las imágenes
+                        var responseImagenes = galeriaRestClient.getImagenesPorActividad(actividad.getActividadId());
+                        if (responseImagenes.getStatus() == 200) {
+                            List<GaleriaDTO> imagenes = responseImagenes.readEntity(List.class);
+                            if (imagenes != null && !imagenes.isEmpty()) {
+                                List<BusquedaRapidaResultDTO.ImagenActividadDTO> imagenesDTO = imagenes.stream()
+                                        .map(img -> {
+                                            BusquedaRapidaResultDTO.ImagenActividadDTO imgDTO =
+                                                    new BusquedaRapidaResultDTO.ImagenActividadDTO();
+                                            if (img instanceof Map) {
+                                                Map<String, Object> imgMap = (Map<String, Object>) img;
+                                                imgDTO.setId((Integer) imgMap.get("id"));
+                                                imgDTO.setImagenBase64((String) imgMap.get("imagenBase64"));
+                                                imgDTO.setNombreArchivo((String) imgMap.get("nombreArchivo"));
+                                                imgDTO.setTipoContenido((String) imgMap.get("tipoContenido"));
+                                                imgDTO.setEsImagenPrincipal((Boolean) imgMap.get("esImagenPrincipal"));
+                                            }
+                                            return imgDTO;
+                                        })
+                                        .collect(Collectors.toList());
+                                resultado.setImagenes(imagenesDTO);
+                            }
+                        }
+                    } catch (Exception e) {
+                        System.err.println("Error al obtener imágenes para actividad " +
+                                actividad.getActividadId() + ": " + e.getMessage());
+                        resultado.setImagenes(List.of());
+                    }
+
+                    return resultado;
+                })
+                .collect(Collectors.toList());
+    }
+
     private ActividadBusquedaDTO convertirAActividadBusquedaDTO(Busqueda actividad, BusquedaRapidaRequest request) {
         ActividadBusquedaDTO dto = new ActividadBusquedaDTO();
 
-        // Información básica
+        // Informacion básica
         dto.setId(actividad.getActividadId());
         dto.setTitulo(actividad.getTitulo());
         dto.setDescripcion(actividad.getDescripcion());
 
-        // Ubicación
+        // Ubicacion
         dto.setUbicacionDestino(actividad.getUbicacion());
         dto.setProvincia(actividad.getProvincia());
         dto.setCiudad(actividad.getCiudad());
@@ -715,7 +919,7 @@ public class BusquedaRest {
             dto.setMotivoNoDisponible(determinarMotivoNoDisponible(actividad, request));
         }
 
-        // Características
+        // Caracteristicas
         dto.setTipoActividad(actividad.getTipoActividad());
         dto.setNivelDificultad(actividad.getNivelDificultad());
         dto.setDuracion(actividad.getDuracion());
@@ -730,7 +934,7 @@ public class BusquedaRest {
         // Proveedor
         dto.setNombreProveedor(actividad.getNombreProveedor());
 
-        // Etiquetas útiles
+        // Etiquetas utiles
         List<String> etiquetas = new ArrayList<>();
         if (actividad.getNumeroReservas() != null && actividad.getNumeroReservas() > 10) {
             etiquetas.add("Popular");
@@ -743,7 +947,7 @@ public class BusquedaRest {
         }
         dto.setEtiquetas(etiquetas);
 
-        // Características adicionales
+        // Caracteristicas adicionales
         dto.setCancelacionGratuita(true); // Por defecto, puedes implementar lógica específica
         dto.setConfirmacionInmediata(true);
 
@@ -758,12 +962,12 @@ public class BusquedaRest {
 
         if (actividad.getMinimoPersonas() != null &&
                 request.getCantidadPersonas() < actividad.getMinimoPersonas()) {
-            return "Requiere mínimo " + actividad.getMinimoPersonas() + " personas";
+            return "Requiere minimo " + actividad.getMinimoPersonas() + " personas";
         }
 
         if (actividad.getMaximoPersonas() != null &&
                 request.getCantidadPersonas() > actividad.getMaximoPersonas()) {
-            return "Excede capacidad máxima de " + actividad.getMaximoPersonas() + " personas";
+            return "Excede capacidad maxima de " + actividad.getMaximoPersonas() + " personas";
         }
 
         return "No disponible";
@@ -808,7 +1012,7 @@ public class BusquedaRest {
     public Response actualizarIndice(@PathParam("actividadId") Integer actividadId,
                                      BusquedaActividadDTO actividadDTO) {
         try {
-            System.out.println("Actualizando índice para actividad: " + actividadId);
+            System.out.println("Actualizando indice para actividad: " + actividadId);
 
             // Buscar registro existente
             Busqueda busqueda = busquedaRepository.find("actividadId", actividadId)
@@ -826,9 +1030,9 @@ public class BusquedaRest {
             return Response.ok(Map.of("message", "indice actualizado exitosamente")).build();
 
         } catch (Exception e) {
-            System.err.println(" Error al actualizar índice: " + e.getMessage());
+            System.err.println(" Error al actualizar indice: " + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(Map.of("error", "Error al actualizar índice"))
+                    .entity(Map.of("error", "Error al actualizar indice"))
                     .build();
         }
     }
@@ -846,9 +1050,9 @@ public class BusquedaRest {
             // Eliminar todos los registros con esa actividad
             long eliminados = busquedaRepository.delete("actividadId", actividadId);
 
-            System.out.println(" Registros eliminados del índice: " + eliminados);
+            System.out.println("Registros eliminados del indice: " + eliminados);
             return Response.ok(Map.of(
-                    "message", "Actividad eliminada del índice",
+                    "message", "Actividad eliminada del indice",
                     "registrosEliminados", eliminados
             )).build();
 
@@ -868,7 +1072,7 @@ public class BusquedaRest {
     @RolesAllowed({"ADMIN"})
     public Response reindexarTodo() {
         try {
-            System.out.println("Iniciando reindexación completa...");
+            System.out.println("Iniciando reindexacion completa...");
 
             // Limpiar índice actual
             busquedaRepository.deleteAll();
@@ -912,18 +1116,18 @@ public class BusquedaRest {
                 }
             }
 
-            System.out.println(" Reindexación completada: " + indexadas + " exitosas, " + errores + " errores");
+            System.out.println("Reindexacion completada: " + indexadas + " exitosas, " + errores + " errores");
 
             return Response.ok(Map.of(
-                    "message", "Reindexación completada",
+                    "message", "Reindexacion completada",
                     "actividadesIndexadas", indexadas,
                     "errores", errores
             )).build();
 
         } catch (Exception e) {
-            System.err.println(" Error en reindexación: " + e.getMessage());
+            System.err.println("Error en reindexacion: " + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(Map.of("error", "Error en reindexación"))
+                    .entity(Map.of("error", "Error en reindexacion"))
                     .build();
         }
     }

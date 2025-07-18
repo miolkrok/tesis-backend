@@ -7,6 +7,7 @@ import com.distribuida.db.Galeria;
 import com.distribuida.db.ServicioEvento;
 import com.distribuida.dtos.*;
 import com.distribuida.repo.ActividadRepository;
+import com.distribuida.service.ImageService;
 import io.quarkus.security.Authenticated;
 import jakarta.annotation.security.PermitAll;
 import jakarta.annotation.security.RolesAllowed;
@@ -23,7 +24,10 @@ import org.eclipse.microprofile.jwt.JsonWebToken;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import java.time.LocalDateTime;
+import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Path("/actividades")
@@ -35,6 +39,9 @@ public class ActividadRest {
 
     @Inject
     private ActividadRepository actividadRepo;
+
+    @Inject
+    ImageService imageService;
 
     @Inject
     @RestClient
@@ -491,6 +498,51 @@ public class ActividadRest {
         }
     }
 
+    @GET
+    @Path("/con-rating")
+    @PermitAll
+    public Response findAllConRating() {
+        try {
+            var actividades = actividadRepo.listAll();
+
+            List<Map<String, Object>> actividadesConRating = actividades.stream()
+                    .map(actividad -> {
+                        Map<String, Object> actividadMap = new HashMap<>();
+                        actividadMap.put("id", actividad.getId());
+                        actividadMap.put("titulo", actividad.getTitulo());
+                        actividadMap.put("precio", actividad.getPrecio());
+                        actividadMap.put("ubicacionDestino", actividad.getUbicacionDestino());
+
+                        // Obtener rating
+                        try {
+                            // Aquí necesitarías inyectar un cliente REST para opiniones
+                            // Por simplicidad, ponemos 0.0 por defecto
+                            actividadMap.put("rating", 0.0);
+                            actividadMap.put("totalOpiniones", 0);
+                        } catch (Exception e) {
+                            actividadMap.put("rating", 0.0);
+                            actividadMap.put("totalOpiniones", 0);
+                        }
+
+                        // Obtener imagen principal
+                        try {
+                            GaleriaDTO imagenPrincipal = imageService.obtenerImagenPrincipal(actividad.getId());
+                            actividadMap.put("imagenPrincipal", imagenPrincipal);
+                        } catch (Exception e) {
+                            actividadMap.put("imagenPrincipal", null);
+                        }
+
+                        return actividadMap;
+                    })
+                    .collect(Collectors.toList());
+
+            return Response.ok(actividadesConRating).build();
+        } catch (Exception e) {
+            System.err.println("Error al obtener actividades con rating: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
     // ===== MÉTODOS AUXILIARES =====
 
     private Integer getUserIdFromJWT() {
@@ -517,11 +569,10 @@ public class ActividadRest {
         }
     }
 
-    // Método auxiliar para convertir Actividad a ActividadDTO con información completa
     private ActividadDTO convertToDTO(Actividad actividad) {
         ActividadDTO dto = new ActividadDTO();
 
-        // Mapear campos básicos
+        // Mapear campos básicos (mantener tu código existente)
         dto.setId(actividad.getId());
         dto.setProveedorId(actividad.getUsuarioId());
         dto.setTitulo(actividad.getTitulo());
@@ -535,8 +586,17 @@ public class ActividadRest {
         dto.setDisponibilidad(actividad.getDisponibilidad());
         dto.setFechaCreacion(actividad.getFechaCreacion());
         dto.setFechaActualizacion(actividad.getFechaActualizacion());
+        dto.setProvincia(actividad.getProvincia());
+        dto.setCiudad(actividad.getCiudad());
+        dto.setLatitud(actividad.getLatitud());
+        dto.setLongitud(actividad.getLongitud());
+        dto.setEstadoActividad(actividad.getEstadoActividad());
+        dto.setFechaInicioDisponible(actividad.getFechaInicioDisponible());
+        dto.setFechaFinDisponible(actividad.getFechaFinDisponible());
+        dto.setMinimoPersonas(actividad.getMinimoPersonas());
+        dto.setMaximoPersonas(actividad.getMaximoPersonas());
 
-        // Convertir galería
+        // Convertir galería usando el método local
         if (actividad.getGaleria() != null) {
             List<GaleriaDTO> galeriaDTO = actividad.getGaleria().stream()
                     .map(this::convertGaleriaToDTO)
@@ -544,7 +604,7 @@ public class ActividadRest {
             dto.setGaleria(galeriaDTO);
         }
 
-        // Convertir servicios evento
+        // Convertir servicios evento (mantener código existente)
         if (actividad.getServicioEvento() != null) {
             List<ServicioEventoDTO> serviciosDTO = actividad.getServicioEvento().stream()
                     .map(this::convertServicioEventoToDTO)
@@ -581,7 +641,18 @@ public class ActividadRest {
         GaleriaDTO dto = new GaleriaDTO();
         dto.setId(galeria.getId());
         dto.setUrlFoto(galeria.getUrlFoto());
-        dto.setActividadId(galeria.getActividad().getId());
+        dto.setActividadId(galeria.getActividad() != null ? galeria.getActividad().getId() : null);
+        dto.setNombreArchivo(galeria.getNombreArchivo());
+        dto.setTipoContenido(galeria.getTipoContenido());
+        dto.setTamanoArchivo(galeria.getTamanoArchivo());
+        dto.setEsImagenPrincipal(galeria.getEsImagenPrincipal());
+
+        // Convertir imagen binaria a Base64 si existe
+        if (galeria.getImagenBinaria() != null) {
+            String base64Image = Base64.getEncoder().encodeToString(galeria.getImagenBinaria());
+            dto.setImagenBase64(base64Image);
+        }
+
         return dto;
     }
 
