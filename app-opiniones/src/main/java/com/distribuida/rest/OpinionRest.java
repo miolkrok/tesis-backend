@@ -5,6 +5,8 @@ import com.distribuida.clients.UsuarioRestClient;
 import com.distribuida.db.Opinion;
 import com.distribuida.dtos.OpinionDTO;
 import com.distribuida.repo.OpinionRepository;
+import jakarta.annotation.security.PermitAll;
+import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -37,6 +39,7 @@ public class OpinionRest {
     ActividadRestClient actividadRestClient;
 
     @GET
+    @PermitAll
     public List<OpinionDTO> findAll() {
         var opiniones = opinionRepo.listAll();
 
@@ -47,6 +50,7 @@ public class OpinionRest {
 
     @GET
     @Path("/{id}")
+    @PermitAll
     public Response findById(@PathParam("id") Integer id) {
         System.out.println("findById opinion: " + id);
         var op = opinionRepo.findByIdOptional(id);
@@ -65,6 +69,7 @@ public class OpinionRest {
     }
 
     @POST
+    @RolesAllowed({"PROVEEDOR", "ADMIN"})
     public Response create(Opinion opinion) {
         try {
             // Validar que exista el usuario y la actividad
@@ -100,6 +105,7 @@ public class OpinionRest {
 
     @PUT
     @Path("/{id}")
+    @PermitAll
     public Response update(@PathParam("id") Integer id, Opinion opinion) {
         try {
             Opinion obj = opinionRepo.findById(id);
@@ -131,6 +137,7 @@ public class OpinionRest {
 
     @DELETE
     @Path("/{id}")
+    @RolesAllowed({"CLIENTE", "ADMIN"})
     public Response delete(@PathParam("id") Integer id) {
         try {
             boolean deleted = opinionRepo.deleteById(id);
@@ -146,6 +153,7 @@ public class OpinionRest {
 
     @GET
     @Path("/usuario/{usuarioId}")
+    @PermitAll
     public List<OpinionDTO> findByUsuario(@PathParam("usuarioId") String usuarioId) {
         var opiniones = opinionRepo.find("usuarioId", usuarioId).list();
         return opiniones.stream()
@@ -155,6 +163,7 @@ public class OpinionRest {
 
     @GET
     @Path("/actividad/{actividadId}")
+    @PermitAll
     public List<OpinionDTO> findByActividad(@PathParam("actividadId") String actividadId) {
         var opiniones = opinionRepo.find("actividadId", actividadId).list();
         return opiniones.stream()
@@ -164,6 +173,7 @@ public class OpinionRest {
 
     @GET
     @Path("/promedio/actividad/{actividadId}")
+    @PermitAll
     public Response getPromedioPuntuacion(@PathParam("actividadId") Integer actividadId) {
         var opiniones = opinionRepo.find("actividadId", actividadId.toString()).list();
 

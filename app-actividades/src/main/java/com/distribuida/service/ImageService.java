@@ -31,7 +31,7 @@ public class ImageService {
         // Convertir imagen binaria a Base64 si existe
         if (galeria.getImagenBinaria() != null) {
             String base64Image = Base64.getEncoder().encodeToString(galeria.getImagenBinaria());
-            dto.setImagenBase64(base64Image);
+            dto.setImagenBinaria(base64Image);
         }
 
         return dto;
@@ -47,9 +47,9 @@ public class ImageService {
         galeria.setEsImagenPrincipal(dto.getEsImagenPrincipal());
 
         // Convertir imagen Base64 a binario si existe
-        if (dto.getImagenBase64() != null && !dto.getImagenBase64().isEmpty()) {
+        if (dto.getImagenBinaria() != null && !dto.getImagenBinaria().isEmpty()) {
             try {
-                byte[] imageBytes = Base64.getDecoder().decode(dto.getImagenBase64());
+                byte[] imageBytes = Base64.getDecoder().decode(dto.getImagenBinaria());
                 galeria.setImagenBinaria(imageBytes);
             } catch (Exception e) {
                 System.err.println("Error al decodificar imagen Base64: " + e.getMessage());

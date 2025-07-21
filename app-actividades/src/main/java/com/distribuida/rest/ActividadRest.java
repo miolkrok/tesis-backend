@@ -650,7 +650,7 @@ public class ActividadRest {
         // Convertir imagen binaria a Base64 si existe
         if (galeria.getImagenBinaria() != null) {
             String base64Image = Base64.getEncoder().encodeToString(galeria.getImagenBinaria());
-            dto.setImagenBase64(base64Image);
+            dto.setImagenBinaria(base64Image);
         }
 
         return dto;

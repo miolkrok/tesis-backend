@@ -125,9 +125,9 @@ public class GaleriaRest {
             obj.setEsImagenPrincipal(galeriaDTO.getEsImagenPrincipal());
 
             // Actualizar imagen binaria si se proporciona
-            if (galeriaDTO.getImagenBase64() != null && !galeriaDTO.getImagenBase64().isEmpty()) {
+            if (galeriaDTO.getImagenBinaria() != null && !galeriaDTO.getImagenBinaria().isEmpty()) {
                 try {
-                    byte[] imageBytes = Base64.getDecoder().decode(galeriaDTO.getImagenBase64());
+                    byte[] imageBytes = Base64.getDecoder().decode(galeriaDTO.getImagenBinaria());
                     obj.setImagenBinaria(imageBytes);
                 } catch (Exception e) {
                     System.err.println("Error al decodificar imagen: " + e.getMessage());
@@ -186,7 +186,7 @@ public class GaleriaRest {
         try {
             GaleriaDTO galeriaDTO = new GaleriaDTO();
             galeriaDTO.setActividadId(actividadId);
-            galeriaDTO.setImagenBase64(fileBase64);
+            galeriaDTO.setImagenBinaria(fileBase64);
             galeriaDTO.setNombreArchivo(fileName);
             galeriaDTO.setTipoContenido(contentType);
             galeriaDTO.setEsImagenPrincipal(isPrincipal);
@@ -214,7 +214,7 @@ public class GaleriaRest {
         // Convertir imagen binaria a Base64 si existe
         if (galeria.getImagenBinaria() != null) {
             String base64Image = Base64.getEncoder().encodeToString(galeria.getImagenBinaria());
-            dto.setImagenBase64(base64Image);
+            dto.setImagenBinaria(base64Image);
         }
 
         return dto;
@@ -230,9 +230,9 @@ public class GaleriaRest {
         galeria.setEsImagenPrincipal(dto.getEsImagenPrincipal());
 
         // Convertir imagen Base64 a binario si existe
-        if (dto.getImagenBase64() != null && !dto.getImagenBase64().isEmpty()) {
+        if (dto.getImagenBinaria() != null && !dto.getImagenBinaria().isEmpty()) {
             try {
-                byte[] imageBytes = Base64.getDecoder().decode(dto.getImagenBase64());
+                byte[] imageBytes = Base64.getDecoder().decode(dto.getImagenBinaria());
                 galeria.setImagenBinaria(imageBytes);
             } catch (Exception e) {
                 System.err.println("Error al decodificar imagen Base64: " + e.getMessage());

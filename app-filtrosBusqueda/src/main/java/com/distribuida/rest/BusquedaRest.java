@@ -291,7 +291,7 @@ public class BusquedaRest {
                     "diasActividad", request.getDiasActividad()
             );
 
-            System.out.println("✅ Búsqueda completada: " + resultadosMejorados.size() +
+            System.out.println("Búsqueda completada: " + resultadosMejorados.size() +
                     " actividades encontradas con imagenes y ratings");
 
             return Response.ok(response).build();
@@ -840,7 +840,7 @@ public class BusquedaRest {
                                 BusquedaRapidaResultDTO.ImagenActividadDTO imgDTO =
                                         new BusquedaRapidaResultDTO.ImagenActividadDTO();
                                 imgDTO.setId(imagenPrincipal.getId());
-                                imgDTO.setImagenBase64(imagenPrincipal.getImagenBase64());
+                                imgDTO.setImagenBase64(imagenPrincipal.getImagenBinaria());
                                 imgDTO.setNombreArchivo(imagenPrincipal.getNombreArchivo());
                                 imgDTO.setTipoContenido(imagenPrincipal.getTipoContenido());
                                 imgDTO.setEsImagenPrincipal(true);

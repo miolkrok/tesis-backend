@@ -9,7 +9,7 @@ public class GaleriaDTO {
     private String urlFoto;
     private Integer actividadId;
 
-    private String imagenBase64; // Para enviar/recibir imagen en Base64
+    private String imagenBinaria; // Para enviar/recibir imagen en Base64
     private String nombreArchivo;
     private String tipoContenido;
     private Long tamanoArchivo;
