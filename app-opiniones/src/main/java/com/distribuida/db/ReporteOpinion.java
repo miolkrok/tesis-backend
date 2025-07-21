@@ -16,7 +16,7 @@ public class ReporteOpinion {
     private Integer id;
 
     @Column(name="usuario_reportador_id")
-    private String usuarioReportadorId;
+    private Integer usuarioReportadorId;
 
     @Column(name="razon")
     private String razon;

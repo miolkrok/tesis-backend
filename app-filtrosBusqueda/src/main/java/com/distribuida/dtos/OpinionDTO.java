@@ -10,9 +10,9 @@ public class OpinionDTO {
 
     private Integer id;
 
-    private String actividadId;
+    private Integer actividadId;
 
-    private String usuarioId;
+    private Integer usuarioId;
 
     private Integer calificacion;
 
@@ -23,4 +23,8 @@ public class OpinionDTO {
     private LocalDateTime fechaActualizacion;
 
     private List<ReporteOpinionDTO> reporteOpinion;
+
+
+    private String nombreUsuario;
+    private String tituloActividad;
 }

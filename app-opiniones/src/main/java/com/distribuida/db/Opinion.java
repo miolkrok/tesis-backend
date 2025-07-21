@@ -18,10 +18,10 @@ public class Opinion {
     private Integer id;
 
     @Column(name="actividad_id")
-    private String actividadId;
+    private Integer actividadId;
 
     @Column(name="usuario_id")
-    private String usuarioId;
+    private Integer usuarioId;
 
     @Column(name="calificacion")
     private Integer calificacion;
