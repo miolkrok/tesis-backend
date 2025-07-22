@@ -50,7 +50,7 @@ public class OpinionRest {
     public List<OpinionDTO> findAll() {
         var opiniones = opinionRepo.listAll();
         return opiniones.stream()
-                .map(this::convertToDTOBasic) // Usar basic para evitar llamadas externas
+                .map(this::convertToDTOBasic)
                 .collect(Collectors.toList());
     }
 
@@ -58,16 +58,15 @@ public class OpinionRest {
     @Path("/{id}")
     @PermitAll
     public Response findById(@PathParam("id") Integer id) {
-        System.out.println("Buscando opinión ID: " + id);
+        System.out.println("Buscando opinion ID: " + id);
         var op = opinionRepo.findByIdOptional(id);
         if (op.isEmpty()) {
             return Response.status(Response.Status.NOT_FOUND)
-                    .entity("Opinión no encontrada")
+                    .entity("Opinion no encontrada")
                     .build();
         }
 
         Opinion opinion = op.get();
-        // Usar conversión básica para evitar problemas con REST clients
         OpinionDTO dto = convertToDTOBasic(opinion);
         return Response.ok(dto).build();
     }
@@ -78,18 +77,18 @@ public class OpinionRest {
         try {
             // Obtener userId del JWT automáticamente
             Integer userId = getUserIdFromJWT();
-            System.out.println("Creando opinión para usuario: " + userId + " | Actividad: " + opinionDTO.getActividadId());
+            System.out.println("Creando opinion para usuario: " + userId + " | Actividad: " + opinionDTO.getActividadId());
 
             // Validaciones básicas ANTES de las llamadas REST
             if (opinionDTO.getActividadId() == null) {
                 return Response.status(Response.Status.BAD_REQUEST)
-                        .entity("El ID de la actividad es requerido").build();
+                        .entity(Map.of("error", "El ID de la actividad es requerido")).build();
             }
 
             if (opinionDTO.getCalificacion() == null ||
                     opinionDTO.getCalificacion() < 1 || opinionDTO.getCalificacion() > 5) {
                 return Response.status(Response.Status.BAD_REQUEST)
-                        .entity("La calificación debe estar entre 1 y 5").build();
+                        .entity(Map.of("error", "La calificacion debe estar entre 1 y 5")).build();
             }
 
             // Asignar automáticamente el usuario del JWT
@@ -102,44 +101,53 @@ public class OpinionRest {
 
             if (opinionExistente != null) {
                 return Response.status(Response.Status.CONFLICT)
-                        .entity("Ya has opinado sobre esta actividad").build();
+                        .entity(Map.of("error", "Ya has opinado sobre esta actividad")).build();
             }
 
-            // VALIDACIONES OPCIONALES: Solo validar si es crítico
-            // Comentar estas validaciones si los microservicios no están disponibles
-            boolean validarExistencia = true; // Cambiar a false para omitir validaciones externas
+            // VALIDACIONES OPCIONALES CON MANEJO DE ERRORES MEJORADO
+            boolean skipExternalValidation = false;
 
-            if (validarExistencia) {
-                try {
-                    System.out.println(" Validando usuario ID: " + userId);
-                    var usuario = usuarioRestClient.findById(userId);
-                    System.out.println(" Usuario validado: " + usuario.getNombre());
-                } catch (Exception e) {
-                    System.err.println(" Error al validar usuario: " + e.getMessage());
-                    // OPCIÓN 1: Fallar si no se puede validar
+            // Validar usuario (opcional)
+            try {
+                System.out.println("Validando usuario ID: " + userId);
+                var usuario = usuarioRestClient.findById(userId);
+                System.out.println("Usuario validado: " + usuario.getNombre());
+            } catch (Exception e) {
+                System.err.println("Error al validar usuario (continuando sin validacion): " + e.getMessage());
+
+                // En lugar de fallar, continuamos pero marcamos que saltamos la validacion
+                skipExternalValidation = true;
+
+                // Opcional: Solo fallar si es un error crítico (404 = usuario no existe)
+                if (e.getMessage() != null && e.getMessage().contains("404")) {
                     return Response.status(Response.Status.BAD_REQUEST)
-                            .entity("Error al validar usuario: " + e.getMessage()).build();
-
-                    // OPCIÓN 2: Continuar sin validar (comentar return de arriba y descomentar esto)
-                    // System.out.println(" Continuando sin validar usuario...");
-                }
-
-                try {
-                    System.out.println("Validando actividad ID: " + opinionDTO.getActividadId());
-                    var actividad = actividadRestClient.findById(opinionDTO.getActividadId());
-                    System.out.println(" Actividad validada: " + actividad.getTitulo());
-                } catch (Exception e) {
-                    System.err.println(" Error al validar actividad: " + e.getMessage());
-                    // OPCIÓN 1: Fallar si no se puede validar
-                    return Response.status(Response.Status.BAD_REQUEST)
-                            .entity("Error al validar actividad: " + e.getMessage()).build();
-
-                    // OPCIÓN 2: Continuar sin validar (comentar return de arriba y descomentar esto)
-                    // System.out.println(" Continuando sin validar actividad...");
+                            .entity(Map.of("error", "Usuario no encontrado")).build();
                 }
             }
 
-            // Crear nueva opinión
+            // Validar actividad (opcional)
+            try {
+                System.out.println("Validando actividad ID: " + opinionDTO.getActividadId());
+                var actividad = actividadRestClient.findById(opinionDTO.getActividadId());
+                System.out.println("Actividad validada: " + actividad.getTitulo());
+            } catch (Exception e) {
+                System.err.println("Error al validar actividad (continuando sin validacion): " + e.getMessage());
+
+                skipExternalValidation = true;
+
+                // Opcional: Solo fallar si es un error crítico (404 = actividad no existe)
+                if (e.getMessage() != null && e.getMessage().contains("404")) {
+                    return Response.status(Response.Status.BAD_REQUEST)
+                            .entity(Map.of("error", "Actividad no encontrada")).build();
+                }
+            }
+
+            // Log si se saltaron validaciones externas
+            if (skipExternalValidation) {
+                System.out.println("Continuando creacion de opinion sin validaciones externas completas");
+            }
+
+            // Crear nueva opinion
             Opinion opinion = new Opinion();
             opinion.setActividadId(opinionDTO.getActividadId());
             opinion.setUsuarioId(userId);
@@ -154,14 +162,27 @@ public class OpinionRest {
             opinion.setId(null);
             opinionRepo.persist(opinion);
 
-            System.out.println(" Opinión creada exitosamente con ID: " + opinion.getId());
-            return Response.status(Response.Status.CREATED).entity(convertToDTOBasic(opinion)).build();
+            System.out.println("Opinion creada exitosamente con ID: " + opinion.getId());
+
+            // Crear respuesta exitosa
+            Map<String, Object> response = Map.of(
+                    "message", "Opinion creada exitosamente",
+                    "opinion", convertToDTOBasic(opinion),
+                    "validacionesExternas", !skipExternalValidation
+            );
+
+            return Response.status(Response.Status.CREATED).entity(response).build();
 
         } catch (Exception e) {
-            System.err.println(" Error general al crear opinión: " + e.getMessage());
+            System.err.println("Error general al crear opinion: " + e.getMessage());
             e.printStackTrace();
+
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity("Error interno: " + e.getMessage()).build();
+                    .entity(Map.of(
+                            "error", "Error interno del servidor",
+                            "details", e.getMessage(),
+                            "timestamp", LocalDateTime.now().toString()
+                    )).build();
         }
     }
 
@@ -174,7 +195,7 @@ public class OpinionRest {
             Opinion obj = opinionRepo.findById(id);
             if (obj == null) {
                 return Response.status(Response.Status.NOT_FOUND)
-                        .entity("Opinión no encontrada").build();
+                        .entity(Map.of("error", "Opinion no encontrada")).build();
             }
 
             // Verificar permisos: solo el autor o ADMIN pueden actualizar
@@ -182,16 +203,16 @@ public class OpinionRest {
                 Integer userId = getUserIdFromJWT();
                 if (!obj.getUsuarioId().equals(userId)) {
                     return Response.status(Response.Status.FORBIDDEN)
-                            .entity("No tienes permiso para actualizar esta opinión")
+                            .entity(Map.of("error", "No tienes permiso para actualizar esta opinion"))
                             .build();
                 }
             }
 
-            // Solo se permite actualizar calificación y comentario
+            // Solo se permite actualizar calificacion y comentario
             if (opinionDTO.getCalificacion() != null) {
                 if (opinionDTO.getCalificacion() < 1 || opinionDTO.getCalificacion() > 5) {
                     return Response.status(Response.Status.BAD_REQUEST)
-                            .entity("La calificación debe estar entre 1 y 5").build();
+                            .entity(Map.of("error", "La calificacion debe estar entre 1 y 5")).build();
                 }
                 obj.setCalificacion(opinionDTO.getCalificacion());
             }
@@ -202,11 +223,14 @@ public class OpinionRest {
 
             obj.setFechaActualizacion(LocalDateTime.now());
 
-            return Response.ok(convertToDTOBasic(obj)).build();
+            return Response.ok(Map.of(
+                    "message", "Opinion actualizada exitosamente",
+                    "opinion", convertToDTOBasic(obj)
+            )).build();
         } catch (Exception e) {
-            System.err.println("Error al actualizar opinión: " + e.getMessage());
+            System.err.println("Error al actualizar opinion: " + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity("Error interno: " + e.getMessage()).build();
+                    .entity(Map.of("error", "Error interno", "details", e.getMessage())).build();
         }
     }
 
@@ -218,7 +242,7 @@ public class OpinionRest {
             Opinion opinion = opinionRepo.findById(id);
             if (opinion == null) {
                 return Response.status(Response.Status.NOT_FOUND)
-                        .entity("Opinión no encontrada").build();
+                        .entity(Map.of("error", "Opinion no encontrada")).build();
             }
 
             // Verificar permisos: solo el autor o ADMIN pueden eliminar
@@ -226,7 +250,7 @@ public class OpinionRest {
                 Integer userId = getUserIdFromJWT();
                 if (!opinion.getUsuarioId().equals(userId)) {
                     return Response.status(Response.Status.FORBIDDEN)
-                            .entity("No tienes permiso para eliminar esta opinión")
+                            .entity(Map.of("error", "No tienes permiso para eliminar esta opinion"))
                             .build();
                 }
             }
@@ -234,16 +258,16 @@ public class OpinionRest {
             boolean deleted = opinionRepo.deleteById(id);
             if (!deleted) {
                 return Response.status(Response.Status.NOT_FOUND)
-                        .entity("Opinión no encontrada").build();
+                        .entity(Map.of("error", "Opinion no encontrada")).build();
             }
 
             return Response.ok()
-                    .entity(Map.of("message", "Opinión eliminada exitosamente"))
+                    .entity(Map.of("message", "Opinion eliminada exitosamente"))
                     .build();
         } catch (Exception e) {
-            System.err.println("Error al eliminar opinión: " + e.getMessage());
+            System.err.println("Error al eliminar opinion: " + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity("Error interno: " + e.getMessage()).build();
+                    .entity(Map.of("error", "Error interno", "details", e.getMessage())).build();
         }
     }
 
@@ -257,7 +281,7 @@ public class OpinionRest {
             Integer jwtUserId = getUserIdFromJWT();
             if (!usuarioId.equals(jwtUserId)) {
                 return Response.status(Response.Status.FORBIDDEN)
-                        .entity("No tienes permiso para ver las opiniones de este usuario")
+                        .entity(Map.of("error", "No tienes permiso para ver las opiniones de este usuario"))
                         .build();
             }
         }
@@ -328,7 +352,7 @@ public class OpinionRest {
                 "totalOpiniones", opinionRepo.count()
         );
 
-        // Probar conectividad con otros servicios
+        // Probar conectividad con servicio de usuarios
         try {
             var usuarios = usuarioRestClient.findAll();
             result = Map.of(
@@ -346,26 +370,94 @@ public class OpinionRest {
             );
         }
 
+        // Probar conectividad con servicio de actividades
         try {
             var actividades = actividadRestClient.findAll();
-            result = Map.of(
+            Map<String, Object> newResult = Map.of(
                     "opinionService", "OK",
                     "usuarioService", result.get("usuarioService"),
                     "actividadService", "OK - " + actividades.size() + " actividades",
                     "timestamp", LocalDateTime.now().toString(),
                     "totalOpiniones", opinionRepo.count()
             );
+            result = newResult;
         } catch (Exception e) {
-            result = Map.of(
+            Map<String, Object> newResult = Map.of(
                     "opinionService", "OK",
                     "usuarioService", result.get("usuarioService"),
                     "actividadService", "ERROR: " + e.getMessage(),
                     "timestamp", LocalDateTime.now().toString(),
                     "totalOpiniones", opinionRepo.count()
             );
+            result = newResult;
         }
 
         return Response.ok(result).build();
+    }
+
+    // Endpoint simple para crear opinion sin validaciones externas
+    @POST
+    @Path("/simple")
+    @RolesAllowed({"CLIENTE", "ADMIN"})
+    public Response createSimple(@Valid OpinionDTO opinionDTO) {
+        try {
+            Integer userId = getUserIdFromJWT();
+            System.out.println("Creando opinion SIMPLE para usuario: " + userId + " | Actividad: " + opinionDTO.getActividadId());
+
+            // Validaciones básicas únicamente
+            if (opinionDTO.getActividadId() == null) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(Map.of("error", "El ID de la actividad es requerido")).build();
+            }
+
+            if (opinionDTO.getCalificacion() == null ||
+                    opinionDTO.getCalificacion() < 1 || opinionDTO.getCalificacion() > 5) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(Map.of("error", "La calificacion debe estar entre 1 y 5")).build();
+            }
+
+            // Verificar opinion duplicada
+            Opinion opinionExistente = opinionRepo.find(
+                    "usuarioId = ?1 AND actividadId = ?2", userId, opinionDTO.getActividadId()
+            ).firstResultOptional().orElse(null);
+
+            if (opinionExistente != null) {
+                return Response.status(Response.Status.CONFLICT)
+                        .entity(Map.of("error", "Ya has opinado sobre esta actividad")).build();
+            }
+
+            // Crear opinion directamente (SIN validaciones externas)
+            Opinion opinion = new Opinion();
+            opinion.setActividadId(opinionDTO.getActividadId());
+            opinion.setUsuarioId(userId);
+            opinion.setCalificacion(opinionDTO.getCalificacion());
+            opinion.setComentario(opinionDTO.getComentario());
+
+            LocalDateTime now = LocalDateTime.now();
+            opinion.setFechaCreacion(now);
+            opinion.setFechaActualizacion(now);
+
+            opinion.setId(null);
+            opinionRepo.persist(opinion);
+
+            System.out.println("Opinion SIMPLE creada exitosamente con ID: " + opinion.getId());
+
+            return Response.status(Response.Status.CREATED)
+                    .entity(Map.of(
+                            "message", "Opinion creada exitosamente (modo simple)",
+                            "opinion", convertToDTOBasic(opinion)
+                    )).build();
+
+        } catch (Exception e) {
+            System.err.println("Error al crear opinion simple: " + e.getMessage());
+            e.printStackTrace();
+
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of(
+                            "error", "Error interno del servidor",
+                            "details", e.getMessage()
+                    )).build();
+        }
     }
 
     // ===== MÉTODOS AUXILIARES =====
@@ -373,7 +465,7 @@ public class OpinionRest {
     private Integer getUserIdFromJWT() {
         try {
             Object userIdClaim = jwt.getClaim("userId");
-            System.out.println(" Claim userId del JWT: " + userIdClaim + " (Tipo: " +
+            System.out.println("Claim userId del JWT: " + userIdClaim + " (Tipo: " +
                     (userIdClaim != null ? userIdClaim.getClass().getSimpleName() : "null") + ")");
 
             if (userIdClaim instanceof Number) {
@@ -384,7 +476,7 @@ public class OpinionRest {
                 return Integer.valueOf(userIdClaim.toString());
             }
         } catch (Exception e) {
-            System.err.println("Error al obtener userId del JWT: " + e.getMessage());
+            System.err.println(" Error al obtener userId del JWT: " + e.getMessage());
             throw new RuntimeException("Token JWT inválido");
         }
     }
@@ -399,33 +491,9 @@ public class OpinionRest {
         dto.setFechaCreacion(opinion.getFechaCreacion());
         dto.setFechaActualizacion(opinion.getFechaActualizacion());
 
-        // Información básica sin llamadas REST
+        // Informacion básica sin llamadas REST
         dto.setNombreUsuario("Usuario " + opinion.getUsuarioId());
         dto.setTituloActividad("Actividad " + opinion.getActividadId());
-
-        return dto;
-    }
-
-    // Método con llamadas REST (usar solo cuando los servicios estén disponibles)
-    private OpinionDTO convertToDTO(Opinion opinion) {
-        OpinionDTO dto = convertToDTOBasic(opinion);
-
-        // Intentar obtener información adicional del usuario y actividad
-        try {
-            var usuario = usuarioRestClient.findById(opinion.getUsuarioId());
-            dto.setNombreUsuario(usuario.getNombre() + " " + usuario.getApellido());
-        } catch (Exception e) {
-            System.err.println("No se pudo obtener info del usuario: " + e.getMessage());
-            dto.setNombreUsuario("Usuario " + opinion.getUsuarioId());
-        }
-
-        try {
-            var actividad = actividadRestClient.findById(opinion.getActividadId());
-            dto.setTituloActividad(actividad.getTitulo());
-        } catch (Exception e) {
-            System.err.println("No se pudo obtener info de la actividad: " + e.getMessage());
-            dto.setTituloActividad("Actividad " + opinion.getActividadId());
-        }
 
         return dto;
     }
