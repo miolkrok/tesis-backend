@@ -9,6 +9,7 @@ import jakarta.transaction.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -65,7 +66,7 @@ public class BusquedaRepository implements PanacheRepositoryBase<Busqueda, Integ
             Double latitud, Double longitud, Double radioKm) {
 
         StringBuilder query = new StringBuilder("estadoActividad = 'ACTIVA'");
-        Parameters params = Parameters.with("estadoActivo", "ACTIVA");
+        Map<String, Object> params = new HashMap<>();
 
         // Filtro por ubicación
         if (ubicacion != null && !ubicacion.trim().isEmpty()) {
@@ -74,7 +75,7 @@ public class BusquedaRepository implements PanacheRepositoryBase<Busqueda, Integ
                     .append("LOWER(provincia) LIKE :ubicacion OR ")
                     .append("LOWER(ubicacion) LIKE :ubicacion")
                     .append(")");
-            params.and("ubicacion", "%" + ubicacion.toLowerCase() + "%");
+            params.put("ubicacion", "%" + ubicacion.toLowerCase() + "%");
         }
 
         // Filtro por proximidad geográfica
@@ -83,38 +84,41 @@ public class BusquedaRepository implements PanacheRepositoryBase<Busqueda, Integ
             query.append(" AND (6371 * acos(cos(radians(:lat)) * cos(radians(latitud)) * ");
             query.append("cos(radians(longitud) - radians(:lng)) + sin(radians(:lat)) * ");
             query.append("sin(radians(latitud)))) <= :radio");
-            params.and("lat", latitud).and("lng", longitud).and("radio", radioKm);
+            params.put("lat", latitud);
+            params.put("lng", longitud);
+            params.put("radio", radioKm);
         }
 
         // Filtro por disponibilidad de fechas
         if (fechaInicio != null && fechaFin != null) {
             query.append(" AND (fechaInicioDisponible IS NULL OR fechaInicioDisponible <= :fechaInicio)");
             query.append(" AND (fechaFinDisponible IS NULL OR fechaFinDisponible >= :fechaFin)");
-            params.and("fechaInicio", fechaInicio).and("fechaFin", fechaFin);
+            params.put("fechaInicio", fechaInicio);
+            params.put("fechaFin", fechaFin);
         }
 
         // Filtro por capacidad
         if (cantidadPersonas != null) {
             query.append(" AND (minimoPersonas IS NULL OR minimoPersonas <= :cantidadPersonas)");
             query.append(" AND (maximoPersonas IS NULL OR maximoPersonas >= :cantidadPersonas)");
-            params.and("cantidadPersonas", cantidadPersonas);
+            params.put("cantidadPersonas", cantidadPersonas);
         }
 
         // Filtro por tipo de actividad
         if (tipoActividad != null && !tipoActividad.trim().isEmpty()) {
             query.append(" AND LOWER(tipoActividad) = LOWER(:tipoActividad)");
-            params.and("tipoActividad", tipoActividad);
+            params.put("tipoActividad", tipoActividad);
         }
 
         // Filtros de precio
         if (precioMin != null) {
             query.append(" AND precio >= :precioMin");
-            params.and("precioMin", precioMin);
+            params.put("precioMin", precioMin);
         }
 
         if (precioMax != null) {
             query.append(" AND precio <= :precioMax");
-            params.and("precioMax", precioMax);
+            params.put("precioMax", precioMax);
         }
 
         // Ordenamiento
@@ -125,6 +129,9 @@ public class BusquedaRepository implements PanacheRepositoryBase<Busqueda, Integ
         } else {
             query.append(" ORDER BY puntuacionPromedio DESC, numeroReservas DESC");
         }
+
+        System.out.println("Query generada: " + query.toString());
+        System.out.println("Parámetros: " + params.keySet());
 
         return find(query.toString(), params).list();
     }
