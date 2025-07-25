@@ -217,14 +217,14 @@ public class BusquedaRest {
     @PermitAll
     public Response busquedaRapidaMejorada(@Valid BusquedaRapidaRequest request) {
         try {
-            System.out.println("Busqueda Mejorada - Ubicacion: " + request.getUbicacion() +
+            System.out.println("BUSQUEDA MEJORADA - Ubicacion: " + request.getUbicacion() +
                     " | Fechas: " + request.getFechaInicio() + " a " + request.getFechaFin() +
                     " | Personas: " + request.getCantidadPersonas());
 
-            // === VALIDACIONES BaSICAS ===
+            // === VALIDACIONES BASICAS ===
             if (!request.isValidDateRange()) {
                 return Response.status(Response.Status.BAD_REQUEST)
-                        .entity(Map.of("error", "Rango de fechas invalido - Fecha fin debe ser posterior a fecha inicio"))
+                        .entity(Map.of("error", "Rango de fechas inválido - Fecha fin debe ser posterior a fecha inicio"))
                         .build();
             }
 
@@ -234,7 +234,7 @@ public class BusquedaRest {
                         .build();
             }
 
-            // === GEOCODIFICACIoN ===
+            // === GEOCODIFICACION ===
             CoordenadasService.Coordenadas coordenadas = null;
             if (request.getLatitud() == null || request.getLongitud() == null) {
                 coordenadas = coordenadasService.obtenerCoordenadas(request.getUbicacion());
@@ -243,7 +243,7 @@ public class BusquedaRest {
                 System.out.println("Coordenadas obtenidas: " + coordenadas.getLatitud() + ", " + coordenadas.getLongitud());
             }
 
-            // === BuSQUEDA PRINCIPAL CON FILTROS MEJORADOS ===
+            // === BÚSQUEDA PRINCIPAL CON FILTROS MEJORADOS ===
             List<Busqueda> resultadosBrutos = busquedaRepository.buscarConFiltrosAvanzados(
                     request.getUbicacion(),
                     request.getFechaInicio(),
@@ -269,20 +269,20 @@ public class BusquedaRest {
             // === ORDENAMIENTO ===
             resultadosFiltrados = aplicarOrdenamiento(resultadosFiltrados, request);
 
-            // === CONVERTIR A RESULTADOS MEJORADOS CON RATING E IMaGENES ===
-            List<BusquedaRapidaResultDTO> resultadosMejorados = convertirAResultadosMejoradosParalelo(
+            // === CONVERTIR A RESULTADOS CON LOS CAMPOS ESPECIFICOS QUE NECESITAS ===
+            List<ActividadBusquedaSimpleDTO> resultadosMejorados = convertirAResultadosSimples(
                     resultadosFiltrados, request);
 
-            System.out.println("Resultados con rating e imagenes: " + resultadosMejorados.size());
+            System.out.println("Resultados con datos completos: " + resultadosMejorados.size());
 
-            // === APLICAR PAGINACIoN ===
+            // === APLICAR PAGINACION ===
             int inicio = request.getPagina() * request.getTamanoPagina();
             int fin = Math.min(inicio + request.getTamanoPagina(), resultadosMejorados.size());
 
-            List<BusquedaRapidaResultDTO> resultadosPaginados = resultadosMejorados.subList(
+            List<ActividadBusquedaSimpleDTO> resultadosPaginados = resultadosMejorados.subList(
                     Math.min(inicio, resultadosMejorados.size()), fin);
 
-            // === CREAR RESPUESTA COMPLETA ===
+            // === CREAR RESPUESTA SIMPLIFICADA ===
             Map<String, Object> response = new HashMap<>();
             response.put("actividades", resultadosPaginados);
             response.put("totalElementos", resultadosMejorados.size());
@@ -300,14 +300,14 @@ public class BusquedaRest {
             coordenada.put("longitud", request.getLongitud());
             response.put("coordenadas", coordenada);
 
-            // Resumen de busqueda
+            // Resumen de búsqueda
             Map<String, Object> resumenBusqueda = new HashMap<>();
             resumenBusqueda.put("resultadosBrutos", resultadosBrutos.size());
             resumenBusqueda.put("resultadosFiltrados", resultadosFiltrados.size());
             resumenBusqueda.put("resultadosFinales", resultadosPaginados.size());
             response.put("resumenBusqueda", resumenBusqueda);
 
-            System.out.println("Busqueda completada exitosamente");
+            System.out.println("Búsqueda completada exitosamente");
             return Response.ok(response).build();
 
         } catch (Exception e) {
@@ -321,6 +321,96 @@ public class BusquedaRest {
                     ))
                     .build();
         }
+    }
+
+    private List<ActividadBusquedaSimpleDTO> convertirAResultadosSimples(
+            List<Busqueda> actividades, BusquedaRapidaRequest request) {
+
+        return actividades.stream()
+                .map(busqueda -> {
+                    ActividadBusquedaSimpleDTO resultado = new ActividadBusquedaSimpleDTO();
+
+                    try {
+                        // 1. OBTENER DATOS BASICOS DE LA ACTIVIDAD DESDE EL MODULO DE ACTIVIDADES
+                        ActividadDTO actividad = actividadRestClient.findById(busqueda.getActividadId());
+
+                        if (actividad == null) {
+                            System.err.println("Actividad no encontrada: " + busqueda.getActividadId());
+                            return null;
+                        }
+
+                        // CAMPOS BASICOS
+                        resultado.setId(actividad.getId());
+                        resultado.setTitulo(actividad.getTitulo());
+                        resultado.setPrecio(actividad.getPrecio());
+
+                        // 2. OBTENER IMAGEN PRINCIPAL DESDE EL MÓDULO DE ACTIVIDADES
+                        try {
+                            var responseImagenPrincipal = galeriaRestClient.getImagenPrincipal(actividad.getId());
+                            if (responseImagenPrincipal.getStatus() == 200) {
+                                Map<String, Object> imagenData = (Map<String, Object>) responseImagenPrincipal.readEntity(Map.class);
+                                if (imagenData != null && imagenData.get("imagenBinaria") != null) {
+                                    resultado.setImagen((String) imagenData.get("imagenBinaria"));
+                                }
+                            }
+                        } catch (Exception e) {
+                            System.err.println("Error obteniendo imagen para actividad " + actividad.getId() + ": " + e.getMessage());
+                            resultado.setImagen(null);
+                        }
+
+                        // 3. OBTENER RATING PROMEDIO DESDE EL MÓDULO DE OPINIONES
+                        try {
+                            var responseOpinion = opinionRestClient.getPromedioPuntuacion(actividad.getId());
+                            if (responseOpinion.getStatus() == 200) {
+                                Map<String, Object> opinionData = (Map<String, Object>) responseOpinion.readEntity(Map.class);
+                                Object promedio = opinionData.get("promedioPuntuacion");
+                                Object total = opinionData.get("totalOpiniones");
+
+                                if (promedio instanceof Number) {
+                                    double rating = ((Number) promedio).doubleValue();
+                                    resultado.setRating(Math.round(rating * 100.0) / 100.0);
+                                } else {
+                                    resultado.setRating(0.0);
+                                }
+
+                                if (total instanceof Number) {
+                                    resultado.setTotalOpiniones(((Number) total).intValue());
+                                } else {
+                                    resultado.setTotalOpiniones(0);
+                                }
+                            } else {
+                                resultado.setRating(0.0);
+                                resultado.setTotalOpiniones(0);
+                            }
+                        } catch (Exception e) {
+                            System.err.println("Error obteniendo rating para actividad " + actividad.getId() + ": " + e.getMessage());
+                            resultado.setRating(0.0);
+                            resultado.setTotalOpiniones(0);
+                        }
+
+                        // 4. CALCULAR DISTANCIA SI HAY COORDENADAS
+                        if (request.getLatitud() != null && request.getLongitud() != null &&
+                                busqueda.getLatitud() != null && busqueda.getLongitud() != null) {
+                            double distancia = coordenadasService.calcularDistancia(
+                                    request.getLatitud(), request.getLongitud(),
+                                    busqueda.getLatitud(), busqueda.getLongitud()
+                            );
+                            resultado.setDistanciaKm(Math.round(distancia * 100.0) / 100.0);
+                        }
+
+                        System.out.println("Procesada actividad: " + actividad.getId() + " - " + actividad.getTitulo() +
+                                " | Rating: " + resultado.getRating() +
+                                " | Imagen: " + (resultado.getImagen() != null ? "SI" : "NO"));
+
+                        return resultado;
+
+                    } catch (Exception e) {
+                        System.err.println("Error procesando actividad " + busqueda.getActividadId() + ": " + e.getMessage());
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull) // Filtrar resultados nulos
+                .collect(Collectors.toList());
     }
 
     // ===== MeTODOS PRIVADOS DE APOYO =====

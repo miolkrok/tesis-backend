@@ -85,7 +85,7 @@ public class ActividadRest {
     }
 
     @POST
-    @RolesAllowed({"PROVEEDOR", "ADMIN"})
+    @PermitAll
     public Response create(Actividad actividad) {
         try {
             Integer userId = getUserIdFromJWT();
