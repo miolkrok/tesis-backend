@@ -2,7 +2,7 @@
 # docker build -t app-authors .
 # docker tag app-authors miolkrok/app-authors
 #
-# docker build -t miolkrok/app-authors .
+# docker build -t miolkrok/app-usuarios .
 
 FROM eclipse-temurin:17.0.11_9-jre-jammy
 
