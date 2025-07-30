@@ -9,13 +9,15 @@ public class ActividadBusquedaSimpleDTO {
 
     private Integer id;
     private String titulo;
-    private String imagen;
+    private String imagen; // Base64 de la imagen principal
     private BigDecimal precio;
-    private Double rating;
+    private Double rating; // Promedio de calificaciones (1-5)
 
-    // CAMPOS ADICIONALES ÚTILES
+    // Campos adicionales útiles
     private Integer totalOpiniones;
-    private Double distanciaKm;
+    private Double distanciaKm; // Si se busca por proximidad
+    private String ubicacionDestino;
+    private String tipoActividad;
 
     // Constructor vacío
     public ActividadBusquedaSimpleDTO() {}

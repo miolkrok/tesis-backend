@@ -44,7 +44,7 @@ public class TokenService {
                 .expiresAt(now.plus(accessTokenDuration))
                 .sign();
 
-        System.out.println("🎫 Token JWT generado para usuario: " + usuario.getId() +
+        System.out.println("Token JWT generado para usuario: " + usuario.getId() +
                 " | Rol: " + usuario.getRol() +
                 " | Expira en: " + accessTokenDuration.toMinutes() + " minutos");
 
