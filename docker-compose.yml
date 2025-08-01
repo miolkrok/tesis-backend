@@ -17,7 +17,7 @@ services:
     container_name: traefik
 
   usuarios:
-    build: .miolkrok/app-usuarios
+    build: ./app-usuarios
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.usuarios.rule=PathPrefix(`/usuarios`)"
@@ -30,7 +30,7 @@ services:
       - "8080"
 
   actividades:
-    build: .miolkrok/app-actividades
+    build: ./app-actividades
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.actividades.rule=PathPrefix(`/actividades`)"
@@ -41,6 +41,59 @@ services:
     container_name: actividades-service
     expose:
       - "8090"
+
+  busquedas:
+    build: ./app-filtrosBusqueda
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.busquedas.rule=PathPrefix(`/busquedas`)"
+      - "traefik.http.routers.busquedas.entrypoints=web"
+      - "traefik.http.services.busquedas.loadbalancer.server.port=8070"
+    container_name: filtros-busqueda-service
+    expose:
+      - "8070"
+
+  opiniones:
+    build: ./app-opiniones
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.opiniones.rule=PathPrefix(`/opiniones`)"
+      - "traefik.http.routers.opiniones.entrypoints=web"
+      - "traefik.http.services.opiniones.loadbalancer.server.port=8085"
+    container_name: opiniones-service
+    expose:
+      - "8085"
+
+  #notificaciones:
+    #build: ./app-notificaciones
+    #labels:
+      #- "traefik.enable=true"
+      #- "traefik.http.routers.notificaciones.rule=PathPrefix(`/notificaciones`) || PathPrefix(`/preferencias`)"
+      #- "traefik.http.routers.notificaciones.entrypoints=web"
+      #- "traefik.http.services.notificaciones.loadbalancer.server.port=8075"
+    #container_name: notificaciones-service
+    #expose:
+      #- "8075"
+  #pagos:
+    #build: ./app-pagos
+    #labels:
+      #- "traefik.enable=true"
+      #- "traefik.http.routers.pagos.rule=PathPrefix(`/pagos`) || PathPrefix(`/reembolsos`)"
+      #- "traefik.http.routers.pagos.entrypoints=web"
+      #- "traefik.http.services.pagos.loadbalancer.server.port=9090"
+    #container_name: pagos-service
+    #expose:
+      #- "9090"
+  #reservas:
+    #build: ./app-reservas
+    #labels:
+      #- "traefik.enable=true"
+      #- "traefik.http.routers.reservas.rule=PathPrefix(`/reservas`) || PathPrefix(`/historial`)"
+      #- "traefik.http.routers.reservas.entrypoints=web"
+      #- "traefik.http.services.reservas.loadbalancer.server.port=9080"
+    #container_name: reservas-service
+    #expose:
+      #- "9080"
 
 # Ahora puedes acceder a:
 # http://localhost:8888/usuarios/auth/login -> usuarios (sin /usuarios en la petición interna)

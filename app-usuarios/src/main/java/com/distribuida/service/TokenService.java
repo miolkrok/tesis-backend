@@ -33,7 +33,7 @@ public class TokenService {
         String token = Jwt.issuer(issuer)
                 .upn(usuario.getEmail())
                 .groups(new HashSet<>(Arrays.asList(usuario.getRol().split(","))))
-                .claim("userId", usuario.getId())  // ✅ Integer directo
+                .claim("userId", usuario.getId())  //  Integer directo
                 .claim("nombre", usuario.getNombre())
                 .claim("apellido", usuario.getApellido())
                 .claim("rol", usuario.getRol())
