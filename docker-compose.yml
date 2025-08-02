@@ -22,8 +22,6 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.usuarios.rule=PathPrefix(`/usuarios`)"
       - "traefik.http.routers.usuarios.entrypoints=web"
-      - "traefik.http.routers.usuarios.middlewares=usuarios-stripprefix"
-      - "traefik.http.middlewares.usuarios-stripprefix.stripprefix.prefixes=/usuarios"
       - "traefik.http.services.usuarios.loadbalancer.server.port=8080"
     container_name: usuarios-service
     expose:
@@ -35,15 +33,13 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.actividades.rule=PathPrefix(`/actividades`)"
       - "traefik.http.routers.actividades.entrypoints=web"
-      - "traefik.http.routers.actividades.middlewares=actividades-stripprefix"
-      - "traefik.http.middlewares.actividades-stripprefix.stripprefix.prefixes=/actividades"
       - "traefik.http.services.actividades.loadbalancer.server.port=8090"
     container_name: actividades-service
     expose:
       - "8090"
 
   busquedas:
-    build: ./app-filtrosBusqueda
+    image: miolkrok/app-filtros-busqueda
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.busquedas.rule=PathPrefix(`/busquedas`)"
