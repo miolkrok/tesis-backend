@@ -6,6 +6,7 @@ import com.distribuida.db.Reserva;
 import com.distribuida.dtos.ReservaDTO;
 import com.distribuida.repo.ReservaRepository;
 import io.quarkus.security.Authenticated;
+import jakarta.annotation.security.PermitAll;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -97,7 +98,7 @@ public class ReservaRest {
     }
 
     @POST
-    @RolesAllowed({"CLIENTE"})  // Solo clientes pueden crear reservas
+    @PermitAll  // Solo clientes pueden crear reservas
     public Response create(@Valid ReservaDTO reservaDTO) {
         try {
             Integer userId = getUserIdFromJWT();

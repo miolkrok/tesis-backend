@@ -89,7 +89,26 @@ services:
     depends_on:
       - usuarios
       - actividades
-
+  reservas:
+    build: ./app-reservas
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.reservas.rule=PathPrefix(`/reservas`) || PathPrefix(`/historial`)"
+      - "traefik.http.routers.reservas.entrypoints=web"
+      - "traefik.http.services.reservas.loadbalancer.server.port=9080"
+    container_name: reservas-service
+    expose:
+      - "9080"
+    networks:
+      - microservices-network
+    environment:
+      - JAVA_OPTS=-Xmx512m -Xms256m
+      # Configurar URLs de servicios internos de Docker
+      - QUARKUS_REST_CLIENT_ACTIVIDADRESTCLIENT_URL=http://actividades-service:8090
+      - QUARKUS_REST_CLIENT_USUARIORESTCLIENT_URL=http://usuarios-service:8080
+    depends_on:
+      - usuarios
+      - actividades
 networks:
   microservices-network:
     driver: bridge
@@ -114,7 +133,6 @@ networks:
     #container_name: pagos-service
     #expose:
       #- "9090"
-
 
 # Ahora puedes acceder a:
 # http://localhost:8888/usuarios/auth/login -> usuarios (sin /usuarios en la petición interna)
