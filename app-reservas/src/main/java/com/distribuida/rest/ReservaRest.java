@@ -22,6 +22,7 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Path("/reservas")
@@ -98,7 +99,7 @@ public class ReservaRest {
     }
 
     @POST
-    @PermitAll  // Solo clientes pueden crear reservas
+    @PermitAll
     public Response create(@Valid ReservaDTO reservaDTO) {
         try {
             Integer userId = getUserIdFromJWT();
@@ -107,32 +108,70 @@ public class ReservaRest {
             // Validaciones básicas
             if (reservaDTO.getActividadId() == null) {
                 return Response.status(Response.Status.BAD_REQUEST)
-                        .entity("El ID de la actividad es requerido").build();
+                        .entity(Map.of("error", "El ID de la actividad es requerido")).build();
             }
 
             // Asignar automáticamente el usuario del JWT
             reservaDTO.setUsuarioId(userId);
 
-            // Validar que existan el usuario y la actividad con JWT propagado automáticamente
+            // VALIDACIONES OPCIONALES CON MANEJO DE ERRORES MEJORADO
+            boolean skipExternalValidation = false;
+
+            // Validar usuario (opcional pero recomendado)
             try {
+                System.out.println("Validando usuario ID: " + userId);
                 var usuario = usuarioRestClient.findById(userId);
                 System.out.println("Usuario validado: " + usuario.getNombre());
+            } catch (jakarta.ws.rs.WebApplicationException e) {
+                System.err.println("Error al validar usuario - Status: " + e.getResponse().getStatus());
+
+                if (e.getResponse().getStatus() == 404) {
+                    return Response.status(Response.Status.BAD_REQUEST)
+                            .entity(Map.of("error", "Usuario no encontrado")).build();
+                } else if (e.getResponse().getStatus() == 403) {
+                    return Response.status(Response.Status.FORBIDDEN)
+                            .entity(Map.of("error", "No tienes permisos para crear reservas")).build();
+                } else if (e.getResponse().getStatus() == 500) {
+                    System.err.println("Servicio de usuarios no disponible, continuando sin validación");
+                    skipExternalValidation = true;
+                } else {
+                    System.err.println("Error inesperado del servicio de usuarios: " + e.getMessage());
+                    skipExternalValidation = true;
+                }
             } catch (Exception e) {
-                System.err.println("Error al validar usuario: " + e.getMessage());
-                return Response.status(Response.Status.BAD_REQUEST)
-                        .entity("Usuario no encontrado o servicio no disponible").build();
+                System.err.println("Error de conectividad con servicio de usuarios: " + e.getMessage());
+                skipExternalValidation = true;
             }
 
+            // Validar actividad (opcional pero recomendado)
             try {
+                System.out.println("Validando actividad ID: " + reservaDTO.getActividadId());
                 var actividad = actividadRestClient.findById(reservaDTO.getActividadId());
                 System.out.println("Actividad validada: " + actividad.getTitulo());
+            } catch (jakarta.ws.rs.WebApplicationException e) {
+                System.err.println("Error al validar actividad - Status: " + e.getResponse().getStatus());
+
+                if (e.getResponse().getStatus() == 404) {
+                    return Response.status(Response.Status.BAD_REQUEST)
+                            .entity(Map.of("error", "Actividad no encontrada")).build();
+                } else if (e.getResponse().getStatus() == 500) {
+                    System.err.println("Servicio de actividades no disponible, continuando sin validación");
+                    skipExternalValidation = true;
+                } else {
+                    System.err.println("Error inesperado del servicio de actividades: " + e.getMessage());
+                    skipExternalValidation = true;
+                }
             } catch (Exception e) {
-                System.err.println("Error al validar actividad: " + e.getMessage());
-                return Response.status(Response.Status.BAD_REQUEST)
-                        .entity("Actividad no encontrada o servicio no disponible").build();
+                System.err.println("Error de conectividad con servicio de actividades: " + e.getMessage());
+                skipExternalValidation = true;
             }
 
-            // Convertir DTO a entidad
+            // Log si se saltaron validaciones externas
+            if (skipExternalValidation) {
+                System.out.println("Continuando creación de reserva sin todas las validaciones externas");
+            }
+
+            // Crear nueva reserva
             Reserva reserva = new Reserva();
             reserva.setActividadId(reservaDTO.getActividadId());
             reserva.setUsuarioId(userId);  // Del JWT
@@ -153,13 +192,23 @@ public class ReservaRest {
             reservaRepo.persist(reserva);
 
             System.out.println("Reserva creada exitosamente con ID: " + reserva.getId());
-            return Response.status(Response.Status.CREATED).entity(convertToDTO(reserva)).build();
+
+            return Response.status(Response.Status.CREATED)
+                    .entity(Map.of(
+                            "message", "Reserva creada exitosamente",
+                            "reserva", convertToDTO(reserva),
+                            "validacionesExternas", !skipExternalValidation
+                    )).build();
 
         } catch (Exception e) {
-            System.err.println("Error al crear reserva: " + e.getMessage());
+            System.err.println("Error general al crear reserva: " + e.getMessage());
             e.printStackTrace();
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity("Error interno del servidor: " + e.getMessage()).build();
+                    .entity(Map.of(
+                            "error", "Error interno del servidor",
+                            "details", e.getMessage(),
+                            "timestamp", LocalDateTime.now().toString()
+                    )).build();
         }
     }
 

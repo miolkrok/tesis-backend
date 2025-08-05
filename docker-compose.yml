@@ -31,7 +31,6 @@ services:
     networks:
       - microservices-network
 
-
   actividades:
     build: ./app-actividades
     labels:
@@ -93,7 +92,7 @@ services:
     build: ./app-reservas
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.reservas.rule=PathPrefix(`/reservas`) || PathPrefix(`/historial`)"
+      - "traefik.http.routers.reservas.rule=PathPrefix(`/reservas`)"
       - "traefik.http.routers.reservas.entrypoints=web"
       - "traefik.http.services.reservas.loadbalancer.server.port=9080"
     container_name: reservas-service

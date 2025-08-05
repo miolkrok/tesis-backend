@@ -46,30 +46,70 @@ public class UsuarioRest {
     public Response findById(@PathParam("id") Integer id,
                              @Context SecurityContext securityContext) {
 
-        // Los usuarios solo pueden ver su propia información, excepto ADMIN
-        if (!securityContext.isUserInRole("ADMIN")) {
-            // Obtener el userId manejando el tipo JsonNumber
-            Object userIdClaim = jwt.getClaim("userId");
-            Integer tokenUserId = null;
+        try {
+            System.out.println(" Buscando usuario ID: " + id);
 
-            if (userIdClaim != null) {
-                if (userIdClaim instanceof Number) {
-                    tokenUserId = ((Number) userIdClaim).intValue();
+            // Los usuarios solo pueden ver su propia información, excepto ADMIN
+            if (!securityContext.isUserInRole("ADMIN")) {
+                try {
+                    // Obtener el userId manejando el tipo JsonNumber
+                    Object userIdClaim = jwt.getClaim("userId");
+                    Integer tokenUserId = null;
+
+                    if (userIdClaim != null) {
+                        if (userIdClaim instanceof Number) {
+                            tokenUserId = ((Number) userIdClaim).intValue();
+                        } else if (userIdClaim instanceof String) {
+                            tokenUserId = Integer.valueOf((String) userIdClaim);
+                        } else {
+                            tokenUserId = Integer.valueOf(userIdClaim.toString());
+                        }
+                    }
+
+                    System.out.println(" Token UserId: " + tokenUserId + " | Requested ID: " + id);
+
+                    if (tokenUserId == null) {
+                        System.err.println(" No se pudo obtener userId del JWT");
+                        return Response.status(Response.Status.UNAUTHORIZED)
+                                .entity("Token JWT inválido")
+                                .build();
+                    }
+
+                    if (!tokenUserId.equals(id)) {
+                        System.out.println(" Acceso denegado: usuario " + tokenUserId + " intentó acceder a " + id);
+                        return Response.status(Response.Status.FORBIDDEN)
+                                .entity("No tienes permiso para ver este usuario")
+                                .build();
+                    }
+                } catch (Exception e) {
+                    System.err.println(" Error procesando JWT: " + e.getMessage());
+                    return Response.status(Response.Status.UNAUTHORIZED)
+                            .entity("Error procesando token de autenticación")
+                            .build();
                 }
             }
 
-            if (!tokenUserId.equals(id)) {
-                return Response.status(Response.Status.FORBIDDEN)
-                        .entity("No tienes permiso para ver este usuario")
+            // Buscar el usuario
+            var op = usuarioRepo.findByIdOptional(id);
+            if (op.isEmpty()) {
+                System.out.println("Usuario no encontrado: " + id);
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity("Usuario no encontrado")
                         .build();
             }
-        }
 
-        var op = usuarioRepo.findByIdOptional(id);
-        if (op.isEmpty()) {
-            return Response.status(Response.Status.NOT_FOUND).build();
+            Usuario usuario = op.get();
+            System.out.println("Usuario encontrado: " + usuario.getEmail());
+
+            return Response.ok(usuario).build();
+
+        } catch (Exception e) {
+            System.err.println("Error interno al buscar usuario " + id + ": " + e.getMessage());
+            e.printStackTrace();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity("Error interno del servidor")
+                    .build();
         }
-        return Response.ok(op.get()).build();
     }
 
     @PUT
