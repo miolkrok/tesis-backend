@@ -44,7 +44,7 @@ public class Reserva {
     @Column(name="fecha_actualizacion")
     private LocalDateTime fechaActualizacion;
 
-    @OneToMany(mappedBy = "reserva",cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "reserva",cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     private List<HistorialReserva> historialReserva;
 
 }

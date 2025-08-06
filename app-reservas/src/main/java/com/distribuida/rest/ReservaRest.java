@@ -48,7 +48,8 @@ public class ReservaRest {
     JsonWebToken jwt;
 
     @GET
-    @RolesAllowed({"ADMIN", "CLIENTE", "PROVEEDOR"})
+    //@RolesAllowed({"ADMIN", "CLIENTE", "PROVEEDOR"})
+    @PermitAll
     public List<ReservaDTO> findAll(@Context SecurityContext securityContext) {
         // Solo ADMIN puede ver todas las reservas
         if (securityContext.isUserInRole("ADMIN")) {
@@ -406,9 +407,9 @@ public class ReservaRest {
         dto.setFechaActualizacion(reserva.getFechaActualizacion());
 
         // Incluir historial si existe
-        if (reserva.getHistorialReserva() != null) {
+        /*if (reserva.getHistorialReserva() != null) {
             dto.setHistorialReserva(reserva.getHistorialReserva());
-        }
+        }*/
 
         return dto;
     }

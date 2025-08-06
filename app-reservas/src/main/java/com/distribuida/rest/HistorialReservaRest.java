@@ -2,6 +2,7 @@ package com.distribuida.rest;
 
 import com.distribuida.db.HistorialReserva;
 import com.distribuida.repo.HistorialReservaRepository;
+import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -53,5 +54,14 @@ public class HistorialReservaRest {
     public Response delete(@PathParam("id") Integer id) {
         historialReservaRepo.deleteById(id);
         return Response.ok().build();
+    }
+
+    @GET
+    @Path("/{id}/historial")
+    @RolesAllowed({"ADMIN", "CLIENTE", "PROVEEDOR"})
+    public Response getHistorialReserva(@PathParam("id") Integer id) {
+        // Lógica para cargar el historial específicamente
+        var historial = historialReservaRepo.find("reserva.id", id).list();
+        return Response.ok(historial).build();
     }
 }
