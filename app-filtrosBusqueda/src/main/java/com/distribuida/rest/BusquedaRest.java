@@ -22,9 +22,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 
@@ -69,6 +67,35 @@ public class BusquedaRest {
     @Path("/simple")
     @PermitAll
     public Response findAllSimple() {
+        try {
+            System.out.println("Obteniendo todas las actividades - modo simple PARALELO");
+
+            var actividades = actividadRestClient.findAll();
+
+            // Usar parallelStream para procesar actividades en paralelo
+            List<ActividadSimpleDTO> actividadesSimples = actividades.parallelStream()
+                    .filter(actividad -> "ACTIVA".equals(actividad.getEstadoActividad()))
+                    .map(this::convertirAActividadSimpleRapido)
+                    .filter(Objects::nonNull) // Filtrar nulls en caso de errores
+                    .collect(Collectors.toList());
+
+            System.out.println("Procesadas " + actividadesSimples.size() + " actividades en modo paralelo");
+
+            return Response.ok(actividadesSimples).build();
+
+        } catch (Exception e) {
+            System.err.println("Error en findAllSimple: " + e.getMessage());
+            e.printStackTrace();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of(
+                            "error", "Error al obtener actividades",
+                            "message", e.getMessage()
+                    ))
+                    .build();
+        }
+    }
+
+    /*public Response findAllSimple() {
         try {
             System.out.println("Obteniendo todas las actividades - modo simple");
 
@@ -137,7 +164,7 @@ public class BusquedaRest {
                     ))
                     .build();
         }
-    }
+    }*/
 
 
     /**
@@ -714,78 +741,67 @@ public class BusquedaRest {
      * Método auxiliar para convertir Busqueda a ActividadBusquedaSimpleDTO
      * con llamadas a los microservicios para obtener imagen y rating
      */
-    private ActividadBusquedaSimpleDTO convertirAActividadSimple(Busqueda busqueda) {
+    private ActividadSimpleDTO convertirAActividadSimpleRapido(ActividadDTO actividad) {
         try {
-            ActividadBusquedaSimpleDTO dto = new ActividadBusquedaSimpleDTO();
+            ActividadSimpleDTO simple = new ActividadSimpleDTO();
 
-            // Campos básicos desde la base de búsqueda
-            dto.setId(busqueda.getActividadId());
-            dto.setTitulo(busqueda.getTitulo());
-            dto.setPrecio(busqueda.getPrecio());
-            dto.setUbicacionDestino(busqueda.getUbicacion());
-            dto.setTipoActividad(busqueda.getTipoActividad());
+            // Datos básicos (siempre disponibles)
+            simple.setId(actividad.getId());
+            simple.setTitulo(actividad.getTitulo());
+            simple.setPrecio(actividad.getPrecio());
 
-            // 1. OBTENER IMAGEN PRINCIPAL desde el módulo de actividades
-            try {
-                var responseImagen = galeriaRestClient.getImagenPrincipal(busqueda.getActividadId());
-                if (responseImagen.getStatus() == 200) {
-                    Map<String, Object> imagenData = responseImagen.readEntity(Map.class);
-                    if (imagenData != null && imagenData.get("imagenBinaria") != null) {
-                        dto.setImagen((String) imagenData.get("imagenBinaria"));
-                        System.out.println("Imagen obtenida para actividad: " + busqueda.getActividadId());
-                    } else {
-                        dto.setImagen(null);
-                        System.out.println("No hay imagen para actividad: " + busqueda.getActividadId());
+            // Crear CompletableFutures para llamadas paralelas
+            CompletableFuture<String> imagenFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    var responseImagen = galeriaRestClient.getImagenPrincipal(actividad.getId());
+                    if (responseImagen.getStatus() == 200) {
+                        Map<String, Object> imagenData = responseImagen.readEntity(Map.class);
+                        if (imagenData != null && imagenData.get("imagenBinaria") != null) {
+                            return (String) imagenData.get("imagenBinaria");
+                        }
                     }
-                } else {
-                    dto.setImagen(null);
-                    System.out.println("Error obteniendo imagen (status " + responseImagen.getStatus() + ") para actividad: " + busqueda.getActividadId());
+                } catch (Exception e) {
+                    System.err.println("Error obteniendo imagen para actividad " + actividad.getId() + ": " + e.getMessage());
                 }
-            } catch (Exception e) {
-                System.err.println("Error obteniendo imagen para actividad " + busqueda.getActividadId() + ": " + e.getMessage());
-                dto.setImagen(null);
+                return null;
+            });
+
+            CompletableFuture<Double> ratingFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    var responseRating = opinionRestClient.getPromedioPuntuacion(actividad.getId());
+                    if (responseRating.getStatus() == 200) {
+                        Map<String, Object> ratingData = responseRating.readEntity(Map.class);
+                        Object promedio = ratingData.get("promedioPuntuacion");
+                        if (promedio instanceof Number) {
+                            return Math.round(((Number) promedio).doubleValue() * 100.0) / 100.0;
+                        }
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error obteniendo rating para actividad " + actividad.getId() + ": " + e.getMessage());
+                }
+                return 0.0;
+            });
+
+            // Esperar ambas operaciones con timeout
+            try {
+                // Timeout de 2 segundos para cada operación
+                CompletableFuture.allOf(imagenFuture, ratingFuture)
+                        .get(2, TimeUnit.SECONDS);
+
+                simple.setImagen(imagenFuture.get());
+                simple.setRating(ratingFuture.get());
+
+            } catch (TimeoutException e) {
+                System.err.println("Timeout procesando actividad " + actividad.getId());
+                // Usar valores por defecto
+                simple.setImagen(null);
+                simple.setRating(0.0);
             }
 
-            // 2. OBTENER RATING PROMEDIO desde el módulo de opiniones
-            try {
-                var responseOpinion = opinionRestClient.getPromedioPuntuacion(busqueda.getActividadId());
-                if (responseOpinion.getStatus() == 200) {
-                    Map<String, Object> opinionData = responseOpinion.readEntity(Map.class);
-
-                    Object promedio = opinionData.get("promedioPuntuacion");
-                    Object total = opinionData.get("totalOpiniones");
-
-                    if (promedio instanceof Number) {
-                        double rating = ((Number) promedio).doubleValue();
-                        dto.setRating(Math.round(rating * 100.0) / 100.0); // Redondear a 2 decimales
-                        System.out.println("Rating obtenido: " + dto.getRating() + " para actividad: " + busqueda.getActividadId());
-                    } else {
-                        dto.setRating(0.0);
-                    }
-
-                    if (total instanceof Number) {
-                        dto.setTotalOpiniones(((Number) total).intValue());
-                    } else {
-                        dto.setTotalOpiniones(0);
-                    }
-                } else {
-                    dto.setRating(0.0);
-                    dto.setTotalOpiniones(0);
-                    System.out.println("Error obteniendo rating (status " + responseOpinion.getStatus() + ") para actividad: " + busqueda.getActividadId());
-                }
-            } catch (Exception e) {
-                System.err.println("Error obteniendo rating para actividad " + busqueda.getActividadId() + ": " + e.getMessage());
-                dto.setRating(0.0);
-                dto.setTotalOpiniones(0);
-            }
-
-            System.out.println("Actividad procesada: " + busqueda.getActividadId() + " - " + busqueda.getTitulo() +
-                    " | Rating: " + dto.getRating() + " | Imagen: " + (dto.getImagen() != null ? "SI" : "NO"));
-
-            return dto;
+            return simple;
 
         } catch (Exception e) {
-            System.err.println("Error general procesando actividad " + busqueda.getActividadId() + ": " + e.getMessage());
+            System.err.println("Error general procesando actividad " + actividad.getId() + ": " + e.getMessage());
             return null; // Se filtrará en el stream
         }
     }
