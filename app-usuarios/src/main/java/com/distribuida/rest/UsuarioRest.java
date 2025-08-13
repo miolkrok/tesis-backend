@@ -18,6 +18,7 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Path("/usuarios")
 @Produces(MediaType.APPLICATION_JSON)
@@ -35,9 +36,40 @@ public class UsuarioRest {
 
     @GET
     @RolesAllowed({"ADMIN"})
-    public List<Usuario> findAll() {
-        System.out.println("findAll usuarios - Admin access");
-        return usuarioRepo.listAll();
+    public Response  findAll(@Context SecurityContext securityContext) {
+        try {
+            System.out.println("findAll usuarios - Admin access");
+            System.out.println("Usuario: " + jwt.getName());
+            System.out.println("Roles: " + jwt.getGroups());
+
+            // Verificar que realmente tenga rol ADMIN
+            if (!securityContext.isUserInRole("ADMIN")) {
+                System.err.println("Usuario sin permisos de ADMIN intentó acceder a findAll");
+                return Response.status(Response.Status.FORBIDDEN)
+                        .entity(Map.of("error", "Se requieren permisos de administrador"))
+                        .build();
+            }
+
+            List<Usuario> usuarios = usuarioRepo.listAll();
+            System.out.println("Usuarios encontrados: " + usuarios.size());
+
+            for (Usuario u : usuarios) {
+                System.out.println("Usuario: " + u.getId() + " - " + u.getEmail() + " - " + u.getRol());
+            }
+
+            return Response.ok(usuarios).build();
+
+        } catch (Exception e) {
+            System.err.println("Error en findAll usuarios: " + e.getMessage());
+            e.printStackTrace();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of(
+                            "error", "Error interno del servidor",
+                            "details", e.getMessage(),
+                            "timestamp", LocalDateTime.now().toString()
+                    ))
+                    .build();
+        }
     }
 
     @GET

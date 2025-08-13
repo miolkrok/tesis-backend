@@ -52,6 +52,15 @@ public class BusquedaRest {
     @Inject
     CoordenadasService coordenadasService;
 
+    // Cache simple en memoria
+    private final Map<Integer, ActividadSimpleDTO> actividadCache = new ConcurrentHashMap<>();
+    private final Map<Integer, String> imagenCache = new ConcurrentHashMap<>();
+    private final Map<Integer, Double> ratingCache = new ConcurrentHashMap<>();
+
+    // TTL para cache (5 minutos)
+    private final long CACHE_TTL = 5 * 60 * 1000;
+    private final Map<Integer, Long> cacheTimestamps = new ConcurrentHashMap<>();
+
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
     public BusquedaRest() {
@@ -94,6 +103,395 @@ public class BusquedaRest {
                     .build();
         }
     }
+
+    /**
+     * VERSIÓN ULTRA OPTIMIZADA - Máximo rendimiento con cache y paralelización real
+     */
+    @GET
+    @Path("/simple-ultra")
+    @PermitAll
+    public Response findAllSimpleUltra() {
+        try {
+            System.out.println("Iniciando búsqueda ULTRA optimizada...");
+            long startTime = System.currentTimeMillis();
+
+            // 1. Obtener actividades principales (rápido)
+            var actividades = actividadRestClient.findAll();
+            List<ActividadDTO> actividadesActivas = actividades.stream()
+                    .filter(actividad -> "ACTIVA".equals(actividad.getEstadoActividad()))
+                    .collect(Collectors.toList());
+
+            System.out.println("Actividades activas encontradas: " + actividadesActivas.size());
+
+            // 2. Procesar en batches ultra rápidos con CompletableFuture
+            List<ActividadSimpleDTO> resultados = procesarEnBatchesUltraRapido(actividadesActivas);
+
+            long endTime = System.currentTimeMillis();
+            System.out.println("Búsqueda ULTRA completada en: " + (endTime - startTime) + "ms");
+            System.out.println("Procesadas " + resultados.size() + " actividades exitosamente");
+
+            return Response.ok(Map.of(
+                    "actividades", resultados,
+                    "total", resultados.size(),
+                    "tiempoMs", (endTime - startTime),
+                    "version", "ultra-optimized"
+            )).build();
+
+        } catch (Exception e) {
+            System.err.println("Error en búsqueda ULTRA: " + e.getMessage());
+            e.printStackTrace();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of("error", "Error en búsqueda ultra", "message", e.getMessage()))
+                    .build();
+        }
+    }
+
+    /**
+     * VERSIÓN CON CACHE INTELIGENTE - Evita llamadas redundantes
+     */
+    @GET
+    @Path("/simple-cached")
+    @PermitAll
+    public Response findAllSimpleCached() {
+        try {
+            System.out.println("Iniciando búsqueda con CACHE inteligente...");
+            long startTime = System.currentTimeMillis();
+
+            var actividades = actividadRestClient.findAll();
+            List<ActividadDTO> actividadesActivas = actividades.stream()
+                    .filter(actividad -> "ACTIVA".equals(actividad.getEstadoActividad()))
+                    .collect(Collectors.toList());
+
+            // Usar cache inteligente
+            List<ActividadSimpleDTO> resultados = procesarConCacheInteligente(actividadesActivas);
+
+            long endTime = System.currentTimeMillis();
+            System.out.println("Búsqueda CACHED completada en: " + (endTime - startTime) + "ms");
+
+            return Response.ok(Map.of(
+                    "actividades", resultados,
+                    "total", resultados.size(),
+                    "tiempoMs", (endTime - startTime),
+                    "cacheHits", contarCacheHits(actividadesActivas),
+                    "version", "cached"
+            )).build();
+
+        } catch (Exception e) {
+            System.err.println("Error en búsqueda CACHED: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * VERSIÓN SOLO METADATOS - Sin imágenes para máxima velocidad
+     */
+    @GET
+    @Path("/simple-metadata")
+    @PermitAll
+    public Response findAllMetadataOnly() {
+        try {
+            System.out.println("Iniciando búsqueda SOLO METADATOS...");
+            long startTime = System.currentTimeMillis();
+
+            var actividades = actividadRestClient.findAll();
+
+            // Procesar solo metadatos sin imágenes
+            List<Map<String, Object>> resultados = actividades.stream()
+                    .filter(actividad -> "ACTIVA".equals(actividad.getEstadoActividad()))
+                    .map(this::convertirSoloMetadatos)
+                    .collect(Collectors.toList());
+
+            long endTime = System.currentTimeMillis();
+            System.out.println("Búsqueda METADATA completada en: " + (endTime - startTime) + "ms");
+
+            return Response.ok(Map.of(
+                    "actividades", resultados,
+                    "total", resultados.size(),
+                    "tiempoMs", (endTime - startTime),
+                    "version", "metadata-only"
+            )).build();
+
+        } catch (Exception e) {
+            System.err.println("Error en búsqueda METADATA: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+
+    /**
+     * Procesamiento en batches ultra rápido con CompletableFuture
+     */
+    private List<ActividadSimpleDTO> procesarEnBatchesUltraRapido(List<ActividadDTO> actividades) {
+        final int BATCH_SIZE = 10; // Procesar de 10 en 10
+        List<List<ActividadDTO>> batches = particionarEnBatches(actividades, BATCH_SIZE);
+
+        // Crear un ExecutorService optimizado
+        ExecutorService executorService = ForkJoinPool.commonPool();
+
+        try {
+            // Procesar todos los batches en paralelo
+            List<CompletableFuture<List<ActividadSimpleDTO>>> futures = batches.stream()
+                    .map(batch -> CompletableFuture.supplyAsync(() ->
+                            procesarBatchUltraRapido(batch), executorService))
+                    .collect(Collectors.toList());
+
+            // Esperar todos los resultados con timeout agresivo
+            CompletableFuture<Void> allOf = CompletableFuture.allOf(
+                    futures.toArray(new CompletableFuture[0])
+            );
+
+            // Timeout de 3 segundos máximo
+            allOf.get(3, TimeUnit.SECONDS);
+
+            // Combinar resultados
+            return futures.stream()
+                    .map(this::obtenerResultadoSeguro)
+                    .flatMap(List::stream)
+                    .collect(Collectors.toList());
+
+        } catch (TimeoutException e) {
+            System.err.println("Timeout en procesamiento ultra rápido");
+            return procesarSincrono(actividades); // Fallback
+        } catch (Exception e) {
+            System.err.println("Error en procesamiento: " + e.getMessage());
+            return procesarSincrono(actividades); // Fallback
+        }
+    }
+
+    /**
+     * Procesamiento de un batch individual ultra optimizado
+     */
+    private List<ActividadSimpleDTO> procesarBatchUltraRapido(List<ActividadDTO> batch) {
+        return batch.parallelStream() // Usar parallel stream
+                .map(this::convertirActividadUltraRapido)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Conversión ultra rápida de actividad con timeouts agresivos
+     */
+    private ActividadSimpleDTO convertirActividadUltraRapido(ActividadDTO actividad) {
+        try {
+            ActividadSimpleDTO simple = new ActividadSimpleDTO();
+            simple.setId(actividad.getId());
+            simple.setTitulo(actividad.getTitulo());
+            simple.setPrecio(actividad.getPrecio());
+
+            // CompletableFutures con timeouts MUY agresivos
+            CompletableFuture<String> imagenFuture = CompletableFuture
+                    .supplyAsync(() -> obtenerImagenUltraRapido(actividad.getId()))
+                    .completeOnTimeout(null, 800, TimeUnit.MILLISECONDS); // 800ms max
+
+            CompletableFuture<Double> ratingFuture = CompletableFuture
+                    .supplyAsync(() -> obtenerRatingUltraRapido(actividad.getId()))
+                    .completeOnTimeout(0.0, 500, TimeUnit.MILLISECONDS); // 500ms max
+
+            // Esperar ambos con timeout total de 1 segundo
+            CompletableFuture.allOf(imagenFuture, ratingFuture)
+                    .get(1, TimeUnit.SECONDS);
+
+            simple.setImagen(imagenFuture.get());
+            simple.setRating(ratingFuture.get());
+
+            return simple;
+
+        } catch (Exception e) {
+            // En caso de error, devolver datos básicos
+            ActividadSimpleDTO simple = new ActividadSimpleDTO();
+            simple.setId(actividad.getId());
+            simple.setTitulo(actividad.getTitulo());
+            simple.setPrecio(actividad.getPrecio());
+            simple.setImagen(null);
+            simple.setRating(0.0);
+            return simple;
+        }
+    }
+
+    /**
+     * Obtención de imagen con cache y optimizaciones
+     */
+    private String obtenerImagenUltraRapido(Integer actividadId) {
+        try {
+            // Verificar cache primero
+            if (imagenCache.containsKey(actividadId) && !esCacheExpirado(actividadId)) {
+                return imagenCache.get(actividadId);
+            }
+
+            // Llamada con timeout muy corto
+            var response = galeriaRestClient.getImagenPrincipal(actividadId);
+            if (response.getStatus() == 200) {
+                Map<String, Object> imagenData = response.readEntity(Map.class);
+                if (imagenData != null && imagenData.get("imagenBinaria") != null) {
+                    String imagen = (String) imagenData.get("imagenBinaria");
+
+                    // Cachear resultado
+                    imagenCache.put(actividadId, imagen);
+                    cacheTimestamps.put(actividadId, System.currentTimeMillis());
+
+                    return imagen;
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error obteniendo imagen " + actividadId + ": " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Obtención de rating con cache y optimizaciones
+     */
+    private Double obtenerRatingUltraRapido(Integer actividadId) {
+        try {
+            // Verificar cache primero
+            if (ratingCache.containsKey(actividadId) && !esCacheExpirado(actividadId)) {
+                return ratingCache.get(actividadId);
+            }
+
+            var response = opinionRestClient.getPromedioPuntuacion(actividadId);
+            if (response.getStatus() == 200) {
+                Map<String, Object> ratingData = response.readEntity(Map.class);
+                Object promedio = ratingData.get("promedioPuntuacion");
+                if (promedio instanceof Number) {
+                    Double rating = Math.round(((Number) promedio).doubleValue() * 100.0) / 100.0;
+
+                    // Cachear resultado
+                    ratingCache.put(actividadId, rating);
+                    cacheTimestamps.put(actividadId, System.currentTimeMillis());
+
+                    return rating;
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error obteniendo rating " + actividadId + ": " + e.getMessage());
+        }
+        return 0.0;
+    }
+
+    /**
+     * Procesamiento con cache inteligente
+     */
+    private List<ActividadSimpleDTO> procesarConCacheInteligente(List<ActividadDTO> actividades) {
+        return actividades.parallelStream()
+                .map(actividad -> {
+                    // Verificar cache completo
+                    if (actividadCache.containsKey(actividad.getId()) &&
+                            !esCacheExpirado(actividad.getId())) {
+                        return actividadCache.get(actividad.getId());
+                    }
+
+                    // Procesar y cachear
+                    ActividadSimpleDTO simple = convertirActividadUltraRapido(actividad);
+                    if (simple != null) {
+                        actividadCache.put(actividad.getId(), simple);
+                        cacheTimestamps.put(actividad.getId(), System.currentTimeMillis());
+                    }
+                    return simple;
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Conversión solo metadatos (sin imágenes ni ratings)
+     */
+    private Map<String, Object> convertirSoloMetadatos(ActividadDTO actividad) {
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("id", actividad.getId());
+        metadata.put("titulo", actividad.getTitulo());
+        metadata.put("precio", actividad.getPrecio());
+        metadata.put("ubicacion", actividad.getUbicacionDestino());
+        metadata.put("tipo", actividad.getTipoActividad());
+        metadata.put("duracion", actividad.getDuracion());
+        metadata.put("minimoPersonas", actividad.getMinimoPersonas());
+        metadata.put("maximoPersonas", actividad.getMaximoPersonas());
+        // Sin imagen ni rating = ultra rápido
+        return metadata;
+    }
+
+    // ===== MÉTODOS AUXILIARES =====
+
+    private List<List<ActividadDTO>> particionarEnBatches(List<ActividadDTO> lista, int tamanioBatch) {
+        List<List<ActividadDTO>> batches = new ArrayList<>();
+        for (int i = 0; i < lista.size(); i += tamanioBatch) {
+            batches.add(lista.subList(i, Math.min(i + tamanioBatch, lista.size())));
+        }
+        return batches;
+    }
+
+    private List<ActividadSimpleDTO> obtenerResultadoSeguro(CompletableFuture<List<ActividadSimpleDTO>> future) {
+        try {
+            return future.get();
+        } catch (Exception e) {
+            System.err.println("Error obteniendo resultado: " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    private List<ActividadSimpleDTO> procesarSincrono(List<ActividadDTO> actividades) {
+        return actividades.stream()
+                .limit(10) // Limitar a 10 en modo fallback
+                .map(this::convertirActividadBasico)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    private ActividadSimpleDTO convertirActividadBasico(ActividadDTO actividad) {
+        ActividadSimpleDTO simple = new ActividadSimpleDTO();
+        simple.setId(actividad.getId());
+        simple.setTitulo(actividad.getTitulo());
+        simple.setPrecio(actividad.getPrecio());
+        simple.setImagen(null); // Sin imagen en modo básico
+        simple.setRating(0.0);  // Sin rating en modo básico
+        return simple;
+    }
+
+    private boolean esCacheExpirado(Integer actividadId) {
+        Long timestamp = cacheTimestamps.get(actividadId);
+        return timestamp == null || (System.currentTimeMillis() - timestamp) > CACHE_TTL;
+    }
+
+    private int contarCacheHits(List<ActividadDTO> actividades) {
+        return (int) actividades.stream()
+                .filter(actividad -> actividadCache.containsKey(actividad.getId()) &&
+                        !esCacheExpirado(actividad.getId()))
+                .count();
+    }
+
+    // ===== ENDPOINT DE LIMPIEZA DE CACHE =====
+
+    @DELETE
+    @Path("/cache")
+    @RolesAllowed({"ADMIN"})
+    public Response limpiarCache() {
+        actividadCache.clear();
+        imagenCache.clear();
+        ratingCache.clear();
+        cacheTimestamps.clear();
+
+        return Response.ok(Map.of(
+                "message", "Cache limpiado exitosamente",
+                "timestamp", System.currentTimeMillis()
+        )).build();
+    }
+
+    @GET
+    @Path("/cache/stats")
+    @PermitAll
+    public Response obtenerEstadisticasCache() {
+        return Response.ok(Map.of(
+                "actividadesEnCache", actividadCache.size(),
+                "imagenesEnCache", imagenCache.size(),
+                "ratingsEnCache", ratingCache.size(),
+                "cacheTTL", CACHE_TTL,
+                "ultimaLimpieza", cacheTimestamps.values().stream()
+                        .max(Long::compareTo).orElse(0L)
+        )).build();
+    }
+
+
+
+    /////PRUEBA
 
     /**
      * Busqueda principal con funcionalidad mejorada

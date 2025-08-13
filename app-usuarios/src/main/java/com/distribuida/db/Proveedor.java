@@ -1,5 +1,6 @@
 package com.distribuida.db;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.ToString;
@@ -25,6 +26,7 @@ public class Proveedor {
     private String metodoPago;
 
     @OneToOne(mappedBy = "proveedor",cascade = CascadeType.ALL,fetch = FetchType.LAZY)
+    @JsonBackReference
     Usuario usuario;
 
 }

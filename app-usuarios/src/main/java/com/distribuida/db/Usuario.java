@@ -1,5 +1,7 @@
 package com.distribuida.db;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import io.quarkus.security.jpa.Password;
 import io.quarkus.security.jpa.Roles;
 import io.quarkus.security.jpa.UserDefinition;
@@ -15,7 +17,7 @@ import java.util.List;
 @Entity
 @Table(name = "usuario")
 @Data
-@ToString(exclude = "proveedor")
+@ToString(exclude = {"proveedor", "refreshTokens", "password"})
 @UserDefinition
 public class Usuario {
 
@@ -34,6 +36,7 @@ public class Usuario {
     private String email;
 
     @Password
+    @JsonIgnore
     private String password;
 
     private String telefono;
@@ -59,9 +62,11 @@ public class Usuario {
 
     @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     @JoinColumn(name = "proveedor_id_usuario")
+    @JsonManagedReference
     private Proveedor proveedor;
 
     @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnore
     private List<RefreshToken> refreshTokens;
 
     public void setProveedor(Proveedor proveedor) {
