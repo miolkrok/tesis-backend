@@ -7,6 +7,8 @@ import com.distribuida.db.Galeria;
 import com.distribuida.db.ServicioEvento;
 import com.distribuida.dtos.*;
 import com.distribuida.repo.ActividadRepository;
+import com.distribuida.repo.GaleriaRepository;
+import com.distribuida.repo.ServicioEventoRepository;
 import com.distribuida.service.ImageService;
 import io.quarkus.security.Authenticated;
 import jakarta.annotation.security.PermitAll;
@@ -39,6 +41,12 @@ public class ActividadRest {
 
     @Inject
     private ActividadRepository actividadRepo;
+
+    @Inject
+    private GaleriaRepository galeriaRepo;
+
+    @Inject
+    private ServicioEventoRepository servicioEventoRepo;
 
     @Inject
     ImageService imageService;
@@ -143,7 +151,7 @@ public class ActividadRest {
     @PUT
     @Path("/{id}")
     @RolesAllowed({"PROVEEDOR", "ADMIN"})
-    public Response update(@PathParam("id") Integer id, Actividad actividad,
+    public Response update(@PathParam("id") Integer id, ActividadDTO actividadDTO,
                            @Context SecurityContext securityContext) {
         try {
             Actividad obj = actividadRepo.findById(id);
@@ -161,22 +169,78 @@ public class ActividadRest {
                 }
             }
 
-            // Actualizar campos
-            obj.setTitulo(actividad.getTitulo());
-            obj.setDescripcion(actividad.getDescripcion());
-            obj.setUbicacionDestino(actividad.getUbicacionDestino());
-            obj.setUbicacionSalida(actividad.getUbicacionSalida());
-            obj.setPrecio(actividad.getPrecio());
-            obj.setDuracion(actividad.getDuracion());
-            obj.setNivelDificultad(actividad.getNivelDificultad());
-            obj.setTipoActividad(actividad.getTipoActividad());
-            obj.setDisponibilidad(actividad.getDisponibilidad());
+            // === ACTUALIZAR CAMPOS BASICOS ===
+            if (actividadDTO.getTitulo() != null) {
+                obj.setTitulo(actividadDTO.getTitulo());
+            }
+            if (actividadDTO.getDescripcion() != null) {
+                obj.setDescripcion(actividadDTO.getDescripcion());
+            }
+            if (actividadDTO.getUbicacionDestino() != null) {
+                obj.setUbicacionDestino(actividadDTO.getUbicacionDestino());
+            }
+            if (actividadDTO.getUbicacionSalida() != null) {
+                obj.setUbicacionSalida(actividadDTO.getUbicacionSalida());
+            }
+            if (actividadDTO.getPrecio() != null) {
+                obj.setPrecio(actividadDTO.getPrecio());
+            }
+            if (actividadDTO.getDuracion() != null) {
+                obj.setDuracion(actividadDTO.getDuracion());
+            }
+            if (actividadDTO.getNivelDificultad() != null) {
+                obj.setNivelDificultad(actividadDTO.getNivelDificultad());
+            }
+            if (actividadDTO.getTipoActividad() != null) {
+                obj.setTipoActividad(actividadDTO.getTipoActividad());
+            }
+            if (actividadDTO.getDisponibilidad() != null) {
+                obj.setDisponibilidad(actividadDTO.getDisponibilidad());
+            }
+            if (actividadDTO.getFechaInicioDisponible() != null) {
+                obj.setFechaInicioDisponible(actividadDTO.getFechaInicioDisponible());
+            }
+            if (actividadDTO.getFechaFinDisponible() != null) {
+                obj.setFechaFinDisponible(actividadDTO.getFechaFinDisponible());
+            }
+            if (actividadDTO.getMinimoPersonas() != null) {
+                obj.setMinimoPersonas(actividadDTO.getMinimoPersonas());
+            }
+            if (actividadDTO.getMaximoPersonas() != null) {
+                obj.setMaximoPersonas(actividadDTO.getMaximoPersonas());
+            }
+            if (actividadDTO.getProvincia() != null) {
+                obj.setProvincia(actividadDTO.getProvincia());
+            }
+            if (actividadDTO.getCiudad() != null) {
+                obj.setCiudad(actividadDTO.getCiudad());
+            }
+            if (actividadDTO.getLatitud() != null) {
+                obj.setLatitud(actividadDTO.getLatitud());
+            }
+            if (actividadDTO.getLongitud() != null) {
+                obj.setLongitud(actividadDTO.getLongitud());
+            }
+            if (actividadDTO.getEstadoActividad() != null) {
+                obj.setEstadoActividad(actividadDTO.getEstadoActividad());
+            }
+
             obj.setFechaActualizacion(LocalDateTime.now());
 
-            //Actualizar en la base principal
+            // === MANEJAR GALERIA (OPCIONAL) ===
+            if (actividadDTO.getGaleria() != null && !actividadDTO.getGaleria().isEmpty()) {
+                manejarGaleriaUpdate(obj, actividadDTO.getGaleria());
+            }
+
+            // === MANEJAR SERVICIOS (OPCIONAL) ===
+            if (actividadDTO.getServicioEvento() != null && !actividadDTO.getServicioEvento().isEmpty()) {
+                manejarServiciosUpdate(obj, actividadDTO.getServicioEvento());
+            }
+
+            // Guardar en base principal
             actividadRepo.persist(obj);
 
-            //Sincronizar con búsqueda
+            // Sincronizar con módulo de búsqueda
             try {
                 sincronizarConBusqueda(obj, "UPDATE");
             } catch (Exception e) {
@@ -187,6 +251,126 @@ public class ActividadRest {
         } catch (Exception e) {
             System.err.println("Error al actualizar actividad: " + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+
+    /**
+     * Maneja la actualización de la galería de forma inteligente
+     * - Agrega nuevas imágenes (las que no tienen ID)
+     * - Actualiza imágenes existentes (las que tienen ID)
+     * - Mantiene las imágenes no enviadas en la petición
+     */
+    private void manejarGaleriaUpdate(Actividad actividad, List<GaleriaDTO> nuevaGaleria) {
+        try {
+            System.out.println("Actualizando galería para actividad: " + actividad.getId());
+
+            for (GaleriaDTO galeriaDTO : nuevaGaleria) {
+                if (galeriaDTO.getId() == null) {
+                    // === NUEVA IMAGEN (agregar) ===
+                    Galeria nuevaImagen = new Galeria();
+                    nuevaImagen.setUrlFoto(galeriaDTO.getUrlFoto());
+                    nuevaImagen.setNombreArchivo(galeriaDTO.getNombreArchivo());
+                    nuevaImagen.setTipoContenido(galeriaDTO.getTipoContenido());
+                    nuevaImagen.setTamanoArchivo(galeriaDTO.getTamanoArchivo());
+                    nuevaImagen.setEsImagenPrincipal(galeriaDTO.getEsImagenPrincipal());
+
+                    // Convertir imagen Base64 si existe
+                    if (galeriaDTO.getImagenBinaria() != null && !galeriaDTO.getImagenBinaria().isEmpty()) {
+                        try {
+                            byte[] imageBytes = Base64.getDecoder().decode(galeriaDTO.getImagenBinaria());
+                            nuevaImagen.setImagenBinaria(imageBytes);
+                        } catch (Exception e) {
+                            System.err.println("Error al decodificar imagen: " + e.getMessage());
+                        }
+                    }
+
+                    nuevaImagen.setActividad(actividad);
+
+                    // Si es imagen principal, quitar bandera de otras
+                    if (Boolean.TRUE.equals(galeriaDTO.getEsImagenPrincipal())) {
+                        galeriaRepo.update("esImagenPrincipal = false WHERE actividad.id = ?1", actividad.getId());
+                    }
+
+                    galeriaRepo.persist(nuevaImagen);
+                    System.out.println("Nueva imagen agregada a actividad " + actividad.getId());
+
+                } else {
+                    // === IMAGEN EXISTENTE (actualizar) ===
+                    Galeria imagenExistente = galeriaRepo.findById(galeriaDTO.getId());
+                    if (imagenExistente != null && imagenExistente.getActividad().getId().equals(actividad.getId())) {
+                        // Solo actualizar si pertenece a esta actividad (seguridad)
+                        imagenExistente.setUrlFoto(galeriaDTO.getUrlFoto());
+                        imagenExistente.setNombreArchivo(galeriaDTO.getNombreArchivo());
+                        imagenExistente.setTipoContenido(galeriaDTO.getTipoContenido());
+                        imagenExistente.setTamanoArchivo(galeriaDTO.getTamanoArchivo());
+                        imagenExistente.setEsImagenPrincipal(galeriaDTO.getEsImagenPrincipal());
+
+                        // Actualizar imagen binaria si se proporciona
+                        if (galeriaDTO.getImagenBinaria() != null && !galeriaDTO.getImagenBinaria().isEmpty()) {
+                            try {
+                                byte[] imageBytes = Base64.getDecoder().decode(galeriaDTO.getImagenBinaria());
+                                imagenExistente.setImagenBinaria(imageBytes);
+                            } catch (Exception e) {
+                                System.err.println("Error al actualizar imagen: " + e.getMessage());
+                            }
+                        }
+
+                        // Si es imagen principal, quitar bandera de otras
+                        if (Boolean.TRUE.equals(galeriaDTO.getEsImagenPrincipal())) {
+                            galeriaRepo.update("esImagenPrincipal = false WHERE actividad.id = ?1 AND id != ?2",
+                                    actividad.getId(), galeriaDTO.getId());
+                        }
+
+                        galeriaRepo.persist(imagenExistente);
+                        System.out.println("Imagen actualizada: " + galeriaDTO.getId());
+                    }
+                }
+            }
+
+        } catch (Exception e) {
+            System.err.println("Error al manejar galería: " + e.getMessage());
+            // No lanzar excepción para no fallar toda la actualización
+        }
+    }
+
+    /**
+     * Maneja la actualización de servicios de forma inteligente
+     * - Agrega nuevos servicios (los que no tienen ID)
+     * - Actualiza servicios existentes (los que tienen ID)
+     * - Mantiene los servicios no enviados en la petición
+     */
+    private void manejarServiciosUpdate(Actividad actividad, List<ServicioEventoDTO> nuevosServicios) {
+        try {
+            System.out.println("Actualizando servicios para actividad: " + actividad.getId());
+
+            for (ServicioEventoDTO servicioDTO : nuevosServicios) {
+                if (servicioDTO.getId() == null) {
+                    // === NUEVO SERVICIO (agregar) ===
+                    ServicioEvento nuevoServicio = new ServicioEvento();
+                    nuevoServicio.setListaServicio(servicioDTO.getListaServicio());
+                    nuevoServicio.setActividadServicio(actividad);
+
+                    servicioEventoRepo.persist(nuevoServicio);
+                    System.out.println("Nuevo servicio agregado a actividad " + actividad.getId());
+
+                } else {
+                    // === SERVICIO EXISTENTE (actualizar) ===
+                    ServicioEvento servicioExistente = servicioEventoRepo.findById(servicioDTO.getId());
+                    if (servicioExistente != null &&
+                            servicioExistente.getActividadServicio().getId().equals(actividad.getId())) {
+                        // Solo actualizar si pertenece a esta actividad (seguridad)
+                        servicioExistente.setListaServicio(servicioDTO.getListaServicio());
+
+                        servicioEventoRepo.persist(servicioExistente);
+                        System.out.println("Servicio actualizado: " + servicioDTO.getId());
+                    }
+                }
+            }
+
+        } catch (Exception e) {
+            System.err.println("Error al manejar servicios: " + e.getMessage());
+            // No lanzar excepción para no fallar toda la actualización
         }
     }
 
