@@ -25,6 +25,7 @@ import jakarta.ws.rs.core.SecurityContext;
 import org.eclipse.microprofile.jwt.JsonWebToken;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HashMap;
@@ -151,12 +152,14 @@ public class ActividadRest {
     @PUT
     @Path("/{id}")
     @RolesAllowed({"PROVEEDOR", "ADMIN"})
-    public Response update(@PathParam("id") Integer id, ActividadDTO actividadDTO,
+    public Response update(@PathParam("id") Integer id,@Valid ActividadDTO actividadDTO,
                            @Context SecurityContext securityContext) {
         try {
+            System.out.println("ID: " + id);
             Actividad obj = actividadRepo.findById(id);
             if (obj == null) {
-                return Response.status(Response.Status.NOT_FOUND).build();
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity("Actividad no encontrada").build();
             }
 
             // Verificar permisos
@@ -171,7 +174,16 @@ public class ActividadRest {
 
             // === ACTUALIZAR CAMPOS BASICOS ===
             if (actividadDTO.getTitulo() != null) {
-                obj.setTitulo(actividadDTO.getTitulo());
+                String titulo = actividadDTO.getTitulo().trim();
+                if (titulo.isEmpty()) {
+                    return Response.status(Response.Status.BAD_REQUEST)
+                            .entity(Map.of("error", "El título no puede estar vacío")).build();
+                }
+                if (titulo.length() < 3 || titulo.length() > 200) {
+                    return Response.status(Response.Status.BAD_REQUEST)
+                            .entity(Map.of("error", "El título debe tener entre 3 y 200 caracteres")).build();
+                }
+                obj.setTitulo(titulo);
             }
             if (actividadDTO.getDescripcion() != null) {
                 obj.setDescripcion(actividadDTO.getDescripcion());
@@ -183,8 +195,13 @@ public class ActividadRest {
                 obj.setUbicacionSalida(actividadDTO.getUbicacionSalida());
             }
             if (actividadDTO.getPrecio() != null) {
+                if (actividadDTO.getPrecio().compareTo(BigDecimal.ZERO) < 0) {
+                    return Response.status(Response.Status.BAD_REQUEST)
+                            .entity(Map.of("error", "El precio no puede ser negativo")).build();
+                }
                 obj.setPrecio(actividadDTO.getPrecio());
             }
+
             if (actividadDTO.getDuracion() != null) {
                 obj.setDuracion(actividadDTO.getDuracion());
             }
@@ -197,14 +214,14 @@ public class ActividadRest {
             if (actividadDTO.getDisponibilidad() != null) {
                 obj.setDisponibilidad(actividadDTO.getDisponibilidad());
             }
-            if (actividadDTO.getFechaInicioDisponible() != null) {
-                obj.setFechaInicioDisponible(actividadDTO.getFechaInicioDisponible());
-            }
             if (actividadDTO.getFechaFinDisponible() != null) {
                 obj.setFechaFinDisponible(actividadDTO.getFechaFinDisponible());
             }
-            if (actividadDTO.getMinimoPersonas() != null) {
-                obj.setMinimoPersonas(actividadDTO.getMinimoPersonas());
+            if (obj.getMinimoPersonas() != null && obj.getMaximoPersonas() != null) {
+                if (obj.getMinimoPersonas() > obj.getMaximoPersonas()) {
+                    return Response.status(Response.Status.BAD_REQUEST)
+                            .entity(Map.of("error", "El mínimo de personas no puede ser mayor al máximo")).build();
+                }
             }
             if (actividadDTO.getMaximoPersonas() != null) {
                 obj.setMaximoPersonas(actividadDTO.getMaximoPersonas());
@@ -216,6 +233,10 @@ public class ActividadRest {
                 obj.setCiudad(actividadDTO.getCiudad());
             }
             if (actividadDTO.getLatitud() != null) {
+                if (actividadDTO.getLatitud() < -90 || actividadDTO.getLatitud() > 90) {
+                    return Response.status(Response.Status.BAD_REQUEST)
+                            .entity(Map.of("error", "La latitud debe estar entre -90 y 90")).build();
+                }
                 obj.setLatitud(actividadDTO.getLatitud());
             }
             if (actividadDTO.getLongitud() != null) {
@@ -223,6 +244,13 @@ public class ActividadRest {
             }
             if (actividadDTO.getEstadoActividad() != null) {
                 obj.setEstadoActividad(actividadDTO.getEstadoActividad());
+            }
+
+            if (obj.getFechaInicioDisponible() != null && obj.getFechaFinDisponible() != null) {
+                if (obj.getFechaInicioDisponible().isAfter(obj.getFechaFinDisponible())) {
+                    return Response.status(Response.Status.BAD_REQUEST)
+                            .entity(Map.of("error", "La fecha de inicio no puede ser posterior a la fecha de fin")).build();
+                }
             }
 
             obj.setFechaActualizacion(LocalDateTime.now());
@@ -250,7 +278,8 @@ public class ActividadRest {
             return Response.ok(convertToDTO(obj)).build();
         } catch (Exception e) {
             System.err.println("Error al actualizar actividad: " + e.getMessage());
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity("Error: " + e.getMessage()).build();
         }
     }
 
@@ -278,10 +307,24 @@ public class ActividadRest {
                     // Convertir imagen Base64 si existe
                     if (galeriaDTO.getImagenBinaria() != null && !galeriaDTO.getImagenBinaria().isEmpty()) {
                         try {
-                            byte[] imageBytes = Base64.getDecoder().decode(galeriaDTO.getImagenBinaria());
+                            // Limpiar el Base64 (remover prefijos data:image)
+                            String cleanBase64 = galeriaDTO.getImagenBinaria();
+                            if (cleanBase64.contains(",")) {
+                                cleanBase64 = cleanBase64.split(",")[1];
+                            }
+
+                            // Validar que sea Base64 válido
+                            byte[] imageBytes = Base64.getDecoder().decode(cleanBase64);
+
+                            // Validar tamaño máximo (ejemplo: 10MB)
+                            if (imageBytes.length > 10 * 1024 * 1024) {
+                                throw new IllegalArgumentException("Imagen demasiado grande");
+                            }
+
                             nuevaImagen.setImagenBinaria(imageBytes);
-                        } catch (Exception e) {
-                            System.err.println("Error al decodificar imagen: " + e.getMessage());
+                        } catch (IllegalArgumentException e) {
+                            System.err.println("Error: Base64 inválido o imagen demasiado grande: " + e.getMessage());
+                            throw new BadRequestException("Imagen inválida: " + e.getMessage());
                         }
                     }
 
@@ -330,7 +373,7 @@ public class ActividadRest {
 
         } catch (Exception e) {
             System.err.println("Error al manejar galería: " + e.getMessage());
-            // No lanzar excepción para no fallar toda la actualización
+            throw new BadRequestException("Error procesando galería: " + e.getMessage());
         }
     }
 
