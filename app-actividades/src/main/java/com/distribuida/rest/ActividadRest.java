@@ -155,11 +155,12 @@ public class ActividadRest {
     public Response update(@PathParam("id") Integer id,@Valid ActividadDTO actividadDTO,
                            @Context SecurityContext securityContext) {
         try {
-            System.out.println("ID: " + id);
+            System.out.println("Actualizando actividad ID: " + id);
+
             Actividad obj = actividadRepo.findById(id);
             if (obj == null) {
                 return Response.status(Response.Status.NOT_FOUND)
-                        .entity("Actividad no encontrada").build();
+                        .entity(Map.of("error", "Actividad no encontrada")).build();
             }
 
             // Verificar permisos
@@ -167,108 +168,30 @@ public class ActividadRest {
                 Integer userId = getUserIdFromJWT();
                 if (!obj.getUsuarioId().equals(userId)) {
                     return Response.status(Response.Status.FORBIDDEN)
-                            .entity("No tienes permiso para actualizar esta actividad")
+                            .entity(Map.of("error", "No tienes permiso para actualizar esta actividad"))
                             .build();
                 }
             }
 
             // === ACTUALIZAR CAMPOS BASICOS ===
-            if (actividadDTO.getTitulo() != null) {
-                String titulo = actividadDTO.getTitulo().trim();
-                if (titulo.isEmpty()) {
-                    return Response.status(Response.Status.BAD_REQUEST)
-                            .entity(Map.of("error", "El título no puede estar vacío")).build();
-                }
-                if (titulo.length() < 3 || titulo.length() > 200) {
-                    return Response.status(Response.Status.BAD_REQUEST)
-                            .entity(Map.of("error", "El título debe tener entre 3 y 200 caracteres")).build();
-                }
-                obj.setTitulo(titulo);
-            }
-            if (actividadDTO.getDescripcion() != null) {
-                obj.setDescripcion(actividadDTO.getDescripcion());
-            }
-            if (actividadDTO.getUbicacionDestino() != null) {
-                obj.setUbicacionDestino(actividadDTO.getUbicacionDestino());
-            }
-            if (actividadDTO.getUbicacionSalida() != null) {
-                obj.setUbicacionSalida(actividadDTO.getUbicacionSalida());
-            }
-            if (actividadDTO.getPrecio() != null) {
-                if (actividadDTO.getPrecio().compareTo(BigDecimal.ZERO) < 0) {
-                    return Response.status(Response.Status.BAD_REQUEST)
-                            .entity(Map.of("error", "El precio no puede ser negativo")).build();
-                }
-                obj.setPrecio(actividadDTO.getPrecio());
+            updateBasicFields(obj, actividadDTO);
+
+            // === MANEJAR GALERIA ===
+            if (actividadDTO.getGaleria() != null) {
+                manejarGaleriaUpdate(obj, actividadDTO.getGaleria());
             }
 
-            if (actividadDTO.getDuracion() != null) {
-                obj.setDuracion(actividadDTO.getDuracion());
-            }
-            if (actividadDTO.getNivelDificultad() != null) {
-                obj.setNivelDificultad(actividadDTO.getNivelDificultad());
-            }
-            if (actividadDTO.getTipoActividad() != null) {
-                obj.setTipoActividad(actividadDTO.getTipoActividad());
-            }
-            if (actividadDTO.getDisponibilidad() != null) {
-                obj.setDisponibilidad(actividadDTO.getDisponibilidad());
-            }
-            if (actividadDTO.getFechaFinDisponible() != null) {
-                obj.setFechaFinDisponible(actividadDTO.getFechaFinDisponible());
-            }
-            if (obj.getMinimoPersonas() != null && obj.getMaximoPersonas() != null) {
-                if (obj.getMinimoPersonas() > obj.getMaximoPersonas()) {
-                    return Response.status(Response.Status.BAD_REQUEST)
-                            .entity(Map.of("error", "El mínimo de personas no puede ser mayor al máximo")).build();
-                }
-            }
-            if (actividadDTO.getMaximoPersonas() != null) {
-                obj.setMaximoPersonas(actividadDTO.getMaximoPersonas());
-            }
-            if (actividadDTO.getProvincia() != null) {
-                obj.setProvincia(actividadDTO.getProvincia());
-            }
-            if (actividadDTO.getCiudad() != null) {
-                obj.setCiudad(actividadDTO.getCiudad());
-            }
-            if (actividadDTO.getLatitud() != null) {
-                if (actividadDTO.getLatitud() < -90 || actividadDTO.getLatitud() > 90) {
-                    return Response.status(Response.Status.BAD_REQUEST)
-                            .entity(Map.of("error", "La latitud debe estar entre -90 y 90")).build();
-                }
-                obj.setLatitud(actividadDTO.getLatitud());
-            }
-            if (actividadDTO.getLongitud() != null) {
-                obj.setLongitud(actividadDTO.getLongitud());
-            }
-            if (actividadDTO.getEstadoActividad() != null) {
-                obj.setEstadoActividad(actividadDTO.getEstadoActividad());
-            }
-
-            if (obj.getFechaInicioDisponible() != null && obj.getFechaFinDisponible() != null) {
-                if (obj.getFechaInicioDisponible().isAfter(obj.getFechaFinDisponible())) {
-                    return Response.status(Response.Status.BAD_REQUEST)
-                            .entity(Map.of("error", "La fecha de inicio no puede ser posterior a la fecha de fin")).build();
-                }
+            // === MANEJAR SERVICIOS ===
+            if (actividadDTO.getServicioEvento() != null) {
+                manejarServiciosUpdate(obj, actividadDTO.getServicioEvento());
             }
 
             obj.setFechaActualizacion(LocalDateTime.now());
 
-            // === MANEJAR GALERIA (OPCIONAL) ===
-            if (actividadDTO.getGaleria() != null && !actividadDTO.getGaleria().isEmpty()) {
-                manejarGaleriaUpdate(obj, actividadDTO.getGaleria());
-            }
-
-            // === MANEJAR SERVICIOS (OPCIONAL) ===
-            if (actividadDTO.getServicioEvento() != null && !actividadDTO.getServicioEvento().isEmpty()) {
-                manejarServiciosUpdate(obj, actividadDTO.getServicioEvento());
-            }
-
-            // Guardar en base principal
+            // Persistir cambios
             actividadRepo.persist(obj);
 
-            // Sincronizar con módulo de búsqueda
+            // Sincronizar con modulo de búsqueda
             try {
                 sincronizarConBusqueda(obj, "UPDATE");
             } catch (Exception e) {
@@ -276,13 +199,101 @@ public class ActividadRest {
             }
 
             return Response.ok(convertToDTO(obj)).build();
+
         } catch (Exception e) {
             System.err.println("Error al actualizar actividad: " + e.getMessage());
+            e.printStackTrace();
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity("Error: " + e.getMessage()).build();
+                    .entity(Map.of("error", "Error interno: " + e.getMessage())).build();
         }
     }
 
+    /**
+     * Actualiza los campos basicos de la actividad
+     */
+    private void updateBasicFields(Actividad obj, ActividadDTO actividadDTO) {
+        if (actividadDTO.getTitulo() != null) {
+            String titulo = actividadDTO.getTitulo().trim();
+            if (titulo.isEmpty()) {
+                throw new BadRequestException("El título no puede estar vacío");
+            }
+            if (titulo.length() < 3 || titulo.length() > 200) {
+                throw new BadRequestException("El título debe tener entre 3 y 200 caracteres");
+            }
+            obj.setTitulo(titulo);
+        }
+
+        if (actividadDTO.getDescripcion() != null) {
+            obj.setDescripcion(actividadDTO.getDescripcion());
+        }
+        if (actividadDTO.getUbicacionDestino() != null) {
+            obj.setUbicacionDestino(actividadDTO.getUbicacionDestino());
+        }
+        if (actividadDTO.getUbicacionSalida() != null) {
+            obj.setUbicacionSalida(actividadDTO.getUbicacionSalida());
+        }
+        if (actividadDTO.getPrecio() != null) {
+            if (actividadDTO.getPrecio().compareTo(BigDecimal.ZERO) < 0) {
+                throw new BadRequestException("El precio no puede ser negativo");
+            }
+            obj.setPrecio(actividadDTO.getPrecio());
+        }
+        if (actividadDTO.getDuracion() != null) {
+            obj.setDuracion(actividadDTO.getDuracion());
+        }
+        if (actividadDTO.getNivelDificultad() != null) {
+            obj.setNivelDificultad(actividadDTO.getNivelDificultad());
+        }
+        if (actividadDTO.getTipoActividad() != null) {
+            obj.setTipoActividad(actividadDTO.getTipoActividad());
+        }
+        if (actividadDTO.getDisponibilidad() != null) {
+            obj.setDisponibilidad(actividadDTO.getDisponibilidad());
+        }
+        if (actividadDTO.getFechaInicioDisponible() != null) {
+            obj.setFechaInicioDisponible(actividadDTO.getFechaInicioDisponible());
+        }
+        if (actividadDTO.getFechaFinDisponible() != null) {
+            obj.setFechaFinDisponible(actividadDTO.getFechaFinDisponible());
+        }
+        if (actividadDTO.getMinimoPersonas() != null) {
+            obj.setMinimoPersonas(actividadDTO.getMinimoPersonas());
+        }
+        if (actividadDTO.getMaximoPersonas() != null) {
+            obj.setMaximoPersonas(actividadDTO.getMaximoPersonas());
+        }
+        if (actividadDTO.getProvincia() != null) {
+            obj.setProvincia(actividadDTO.getProvincia());
+        }
+        if (actividadDTO.getCiudad() != null) {
+            obj.setCiudad(actividadDTO.getCiudad());
+        }
+        if (actividadDTO.getLatitud() != null) {
+            if (actividadDTO.getLatitud() < -90 || actividadDTO.getLatitud() > 90) {
+                throw new BadRequestException("La latitud debe estar entre -90 y 90");
+            }
+            obj.setLatitud(actividadDTO.getLatitud());
+        }
+        if (actividadDTO.getLongitud() != null) {
+            obj.setLongitud(actividadDTO.getLongitud());
+        }
+        if (actividadDTO.getEstadoActividad() != null) {
+            obj.setEstadoActividad(actividadDTO.getEstadoActividad());
+        }
+
+        // Validaciones de coherencia
+        if (obj.getMinimoPersonas() != null && obj.getMaximoPersonas() != null) {
+            if (obj.getMinimoPersonas() > obj.getMaximoPersonas()) {
+                throw new BadRequestException("El mínimo de personas no puede ser mayor al máximo");
+            }
+        }
+
+        if (obj.getFechaInicioDisponible() != null && obj.getFechaFinDisponible() != null) {
+            if (obj.getFechaInicioDisponible().isAfter(obj.getFechaFinDisponible())) {
+                throw new BadRequestException("La fecha de inicio no puede ser posterior a la fecha de fin");
+            }
+        }
+    }
 
     /**
      * Maneja la actualización de la galería de forma inteligente
@@ -295,69 +306,12 @@ public class ActividadRest {
             System.out.println("Actualizando galería para actividad: " + actividad.getId());
 
             for (GaleriaDTO galeriaDTO : nuevaGaleria) {
-                if (galeriaDTO.getId() == null) {
-                    // === NUEVA IMAGEN (agregar) ===
-                    Galeria nuevaImagen = new Galeria();
-                    nuevaImagen.setUrlFoto(galeriaDTO.getUrlFoto());
-                    nuevaImagen.setNombreArchivo(galeriaDTO.getNombreArchivo());
-                    nuevaImagen.setTipoContenido(galeriaDTO.getTipoContenido());
-                    nuevaImagen.setTamanoArchivo(galeriaDTO.getTamanoArchivo());
-                    nuevaImagen.setEsImagenPrincipal(galeriaDTO.getEsImagenPrincipal());
-
-                    // Convertir imagen Base64 si existe
-                    if (galeriaDTO.getImagenBinaria() != null && !galeriaDTO.getImagenBinaria().isEmpty()) {
-                        try {
-                            // Limpiar el Base64 (remover prefijos data:image)
-                            String cleanBase64 = galeriaDTO.getImagenBinaria();
-                            if (cleanBase64.contains(",")) {
-                                cleanBase64 = cleanBase64.split(",")[1];
-                            }
-
-                            // Validar que sea Base64 válido
-                            byte[] imageBytes = Base64.getDecoder().decode(cleanBase64);
-
-                            // Validar tamaño máximo (ejemplo: 10MB)
-                            if (imageBytes.length > 10 * 1024 * 1024) {
-                                throw new IllegalArgumentException("Imagen demasiado grande");
-                            }
-
-                            nuevaImagen.setImagenBinaria(imageBytes);
-                        } catch (IllegalArgumentException e) {
-                            System.err.println("Error: Base64 inválido o imagen demasiado grande: " + e.getMessage());
-                            throw new BadRequestException("Imagen inválida: " + e.getMessage());
-                        }
-                    }
-
-                    nuevaImagen.setActividad(actividad);
-
-                    // Si es imagen principal, quitar bandera de otras
-                    if (Boolean.TRUE.equals(galeriaDTO.getEsImagenPrincipal())) {
-                        galeriaRepo.update("esImagenPrincipal = false WHERE actividad.id = ?1", actividad.getId());
-                    }
-
-                    galeriaRepo.persist(nuevaImagen);
-                    System.out.println("Nueva imagen agregada a actividad " + actividad.getId());
-
-                } else {
-                    // === IMAGEN EXISTENTE (actualizar) ===
+                if (galeriaDTO.getId() != null) {
+                    // === SOLO ACTUALIZAR EXISTENTES ===
                     Galeria imagenExistente = galeriaRepo.findById(galeriaDTO.getId());
                     if (imagenExistente != null && imagenExistente.getActividad().getId().equals(actividad.getId())) {
-                        // Solo actualizar si pertenece a esta actividad (seguridad)
-                        imagenExistente.setUrlFoto(galeriaDTO.getUrlFoto());
-                        imagenExistente.setNombreArchivo(galeriaDTO.getNombreArchivo());
-                        imagenExistente.setTipoContenido(galeriaDTO.getTipoContenido());
-                        imagenExistente.setTamanoArchivo(galeriaDTO.getTamanoArchivo());
-                        imagenExistente.setEsImagenPrincipal(galeriaDTO.getEsImagenPrincipal());
-
-                        // Actualizar imagen binaria si se proporciona
-                        if (galeriaDTO.getImagenBinaria() != null && !galeriaDTO.getImagenBinaria().isEmpty()) {
-                            try {
-                                byte[] imageBytes = Base64.getDecoder().decode(galeriaDTO.getImagenBinaria());
-                                imagenExistente.setImagenBinaria(imageBytes);
-                            } catch (Exception e) {
-                                System.err.println("Error al actualizar imagen: " + e.getMessage());
-                            }
-                        }
+                        // Verificar que pertenece a esta actividad (seguridad)
+                        updateGaleriaFields(imagenExistente, galeriaDTO);
 
                         // Si es imagen principal, quitar bandera de otras
                         if (Boolean.TRUE.equals(galeriaDTO.getEsImagenPrincipal())) {
@@ -367,7 +321,11 @@ public class ActividadRest {
 
                         galeriaRepo.persist(imagenExistente);
                         System.out.println("Imagen actualizada: " + galeriaDTO.getId());
+                    } else {
+                        System.err.println("Imagen no encontrada o no pertenece a esta actividad: " + galeriaDTO.getId());
                     }
+                } else {
+                    System.out.println("Skipping galería sin ID - usar endpoint específico para crear nuevas imágenes");
                 }
             }
 
@@ -376,6 +334,49 @@ public class ActividadRest {
             throw new BadRequestException("Error procesando galería: " + e.getMessage());
         }
     }
+
+    /**
+     * Actualiza los campos de una imagen existente
+     */
+    private void updateGaleriaFields(Galeria galeria, GaleriaDTO dto) {
+        if (dto.getUrlFoto() != null) {
+            galeria.setUrlFoto(dto.getUrlFoto());
+        }
+        if (dto.getNombreArchivo() != null) {
+            galeria.setNombreArchivo(dto.getNombreArchivo());
+        }
+        if (dto.getTipoContenido() != null) {
+            galeria.setTipoContenido(dto.getTipoContenido());
+        }
+        if (dto.getTamanoArchivo() != null) {
+            galeria.setTamanoArchivo(dto.getTamanoArchivo());
+        }
+        if (dto.getEsImagenPrincipal() != null) {
+            galeria.setEsImagenPrincipal(dto.getEsImagenPrincipal());
+        }
+
+        // Actualizar imagen binaria si se proporciona
+        if (dto.getImagenBinaria() != null && !dto.getImagenBinaria().isEmpty()) {
+            try {
+                String cleanBase64 = dto.getImagenBinaria();
+                if (cleanBase64.contains(",")) {
+                    cleanBase64 = cleanBase64.split(",")[1];
+                }
+
+                byte[] imageBytes = Base64.getDecoder().decode(cleanBase64);
+
+                // Validar tamaño máximo (10MB)
+                if (imageBytes.length > 10 * 1024 * 1024) {
+                    throw new IllegalArgumentException("Imagen demasiado grande");
+                }
+
+                galeria.setImagenBinaria(imageBytes);
+            } catch (IllegalArgumentException e) {
+                throw new BadRequestException("Imagen inválida: " + e.getMessage());
+            }
+        }
+    }
+
 
     /**
      * Maneja la actualización de servicios de forma inteligente
@@ -388,32 +389,29 @@ public class ActividadRest {
             System.out.println("Actualizando servicios para actividad: " + actividad.getId());
 
             for (ServicioEventoDTO servicioDTO : nuevosServicios) {
-                if (servicioDTO.getId() == null) {
-                    // === NUEVO SERVICIO (agregar) ===
-                    ServicioEvento nuevoServicio = new ServicioEvento();
-                    nuevoServicio.setListaServicio(servicioDTO.getListaServicio());
-                    nuevoServicio.setActividadServicio(actividad);
-
-                    servicioEventoRepo.persist(nuevoServicio);
-                    System.out.println("Nuevo servicio agregado a actividad " + actividad.getId());
-
-                } else {
-                    // === SERVICIO EXISTENTE (actualizar) ===
+                if (servicioDTO.getId() != null) {
+                    // === SOLO ACTUALIZAR EXISTENTES ===
                     ServicioEvento servicioExistente = servicioEventoRepo.findById(servicioDTO.getId());
                     if (servicioExistente != null &&
                             servicioExistente.getActividadServicio().getId().equals(actividad.getId())) {
                         // Solo actualizar si pertenece a esta actividad (seguridad)
-                        servicioExistente.setListaServicio(servicioDTO.getListaServicio());
+                        if (servicioDTO.getListaServicio() != null) {
+                            servicioExistente.setListaServicio(servicioDTO.getListaServicio());
+                        }
 
                         servicioEventoRepo.persist(servicioExistente);
                         System.out.println("Servicio actualizado: " + servicioDTO.getId());
+                    } else {
+                        System.err.println("Servicio no encontrado o no pertenece a esta actividad: " + servicioDTO.getId());
                     }
+                } else {
+                    System.out.println("Skipping servicio sin ID - usar endpoint específico para crear nuevos servicios");
                 }
             }
 
         } catch (Exception e) {
             System.err.println("Error al manejar servicios: " + e.getMessage());
-            // No lanzar excepción para no fallar toda la actualización
+            throw new BadRequestException("Error procesando servicios: " + e.getMessage());
         }
     }
 
@@ -767,6 +765,214 @@ public class ActividadRest {
         } catch (Exception e) {
             System.err.println("Error al obtener actividades con rating: " + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * Agregar nueva imagen a una actividad existente
+     */
+    @POST
+    @Path("/{id}/galeria")
+    @RolesAllowed({"PROVEEDOR", "ADMIN"})
+    public Response agregarImagen(@PathParam("id") Integer actividadId,
+                                  @Valid GaleriaDTO galeriaDTO,
+                                  @Context SecurityContext securityContext) {
+        try {
+            Actividad actividad = actividadRepo.findById(actividadId);
+            if (actividad == null) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity(Map.of("error", "Actividad no encontrada")).build();
+            }
+
+            // Verificar permisos
+            if (!securityContext.isUserInRole("ADMIN")) {
+                Integer userId = getUserIdFromJWT();
+                if (!actividad.getUsuarioId().equals(userId)) {
+                    return Response.status(Response.Status.FORBIDDEN)
+                            .entity(Map.of("error", "No tienes permiso para modificar esta actividad"))
+                            .build();
+                }
+            }
+
+            // Crear nueva imagen
+            Galeria nuevaImagen = new Galeria();
+            nuevaImagen.setUrlFoto(galeriaDTO.getUrlFoto());
+            nuevaImagen.setNombreArchivo(galeriaDTO.getNombreArchivo());
+            nuevaImagen.setTipoContenido(galeriaDTO.getTipoContenido());
+            nuevaImagen.setTamanoArchivo(galeriaDTO.getTamanoArchivo());
+            nuevaImagen.setEsImagenPrincipal(galeriaDTO.getEsImagenPrincipal());
+            nuevaImagen.setActividad(actividad); // IMPORTANTE: Establecer relación
+
+            // Procesar imagen Base64 si existe
+            if (galeriaDTO.getImagenBinaria() != null && !galeriaDTO.getImagenBinaria().isEmpty()) {
+                try {
+                    String cleanBase64 = galeriaDTO.getImagenBinaria();
+                    if (cleanBase64.contains(",")) {
+                        cleanBase64 = cleanBase64.split(",")[1];
+                    }
+
+                    byte[] imageBytes = Base64.getDecoder().decode(cleanBase64);
+
+                    if (imageBytes.length > 10 * 1024 * 1024) {
+                        throw new IllegalArgumentException("Imagen demasiado grande");
+                    }
+
+                    nuevaImagen.setImagenBinaria(imageBytes);
+                } catch (IllegalArgumentException e) {
+                    return Response.status(Response.Status.BAD_REQUEST)
+                            .entity(Map.of("error", "Imagen inválida: " + e.getMessage())).build();
+                }
+            }
+
+            // Si es imagen principal, quitar bandera de otras
+            if (Boolean.TRUE.equals(galeriaDTO.getEsImagenPrincipal())) {
+                galeriaRepo.update("esImagenPrincipal = false WHERE actividad.id = ?1", actividadId);
+            }
+
+            galeriaRepo.persist(nuevaImagen);
+
+            return Response.status(Response.Status.CREATED)
+                    .entity(convertGaleriaToDTO(nuevaImagen)).build();
+
+        } catch (Exception e) {
+            System.err.println("Error al agregar imagen: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of("error", "Error interno: " + e.getMessage())).build();
+        }
+    }
+
+    /**
+     * Agregar nuevo servicio a una actividad existente
+     */
+    @POST
+    @Path("/{id}/servicios")
+    @RolesAllowed({"PROVEEDOR", "ADMIN"})
+    public Response agregarServicio(@PathParam("id") Integer actividadId,
+                                    @Valid ServicioEventoDTO servicioDTO,
+                                    @Context SecurityContext securityContext) {
+        try {
+            Actividad actividad = actividadRepo.findById(actividadId);
+            if (actividad == null) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity(Map.of("error", "Actividad no encontrada")).build();
+            }
+
+            // Verificar permisos
+            if (!securityContext.isUserInRole("ADMIN")) {
+                Integer userId = getUserIdFromJWT();
+                if (!actividad.getUsuarioId().equals(userId)) {
+                    return Response.status(Response.Status.FORBIDDEN)
+                            .entity(Map.of("error", "No tienes permiso para modificar esta actividad"))
+                            .build();
+                }
+            }
+
+            // Crear nuevo servicio
+            ServicioEvento nuevoServicio = new ServicioEvento();
+            nuevoServicio.setListaServicio(servicioDTO.getListaServicio());
+            nuevoServicio.setActividadServicio(actividad); // IMPORTANTE: Establecer relación
+
+            servicioEventoRepo.persist(nuevoServicio);
+
+            return Response.status(Response.Status.CREATED)
+                    .entity(convertServicioEventoToDTO(nuevoServicio)).build();
+
+        } catch (Exception e) {
+            System.err.println("Error al agregar servicio: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of("error", "Error interno: " + e.getMessage())).build();
+        }
+    }
+
+    /**
+     * Eliminar imagen específica
+     */
+    @DELETE
+    @Path("/{id}/galeria/{galeriaId}")
+    @RolesAllowed({"PROVEEDOR", "ADMIN"})
+    public Response eliminarImagen(@PathParam("id") Integer actividadId,
+                                   @PathParam("galeriaId") Integer galeriaId,
+                                   @Context SecurityContext securityContext) {
+        try {
+            Actividad actividad = actividadRepo.findById(actividadId);
+            if (actividad == null) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity(Map.of("error", "Actividad no encontrada")).build();
+            }
+
+            // Verificar permisos
+            if (!securityContext.isUserInRole("ADMIN")) {
+                Integer userId = getUserIdFromJWT();
+                if (!actividad.getUsuarioId().equals(userId)) {
+                    return Response.status(Response.Status.FORBIDDEN)
+                            .entity(Map.of("error", "No tienes permiso para modificar esta actividad"))
+                            .build();
+                }
+            }
+
+            Galeria galeria = galeriaRepo.findById(galeriaId);
+            if (galeria == null || !galeria.getActividad().getId().equals(actividadId)) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity(Map.of("error", "Imagen no encontrada")).build();
+            }
+
+            boolean deleted = galeriaRepo.deleteById(galeriaId);
+            if (!deleted) {
+                return Response.status(Response.Status.NOT_FOUND).build();
+            }
+
+            return Response.ok(Map.of("message", "Imagen eliminada exitosamente")).build();
+
+        } catch (Exception e) {
+            System.err.println("Error al eliminar imagen: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of("error", "Error interno: " + e.getMessage())).build();
+        }
+    }
+
+    /**
+     * Eliminar servicio específico
+     */
+    @DELETE
+    @Path("/{id}/servicios/{servicioId}")
+    @RolesAllowed({"PROVEEDOR", "ADMIN"})
+    public Response eliminarServicio(@PathParam("id") Integer actividadId,
+                                     @PathParam("servicioId") Integer servicioId,
+                                     @Context SecurityContext securityContext) {
+        try {
+            Actividad actividad = actividadRepo.findById(actividadId);
+            if (actividad == null) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity(Map.of("error", "Actividad no encontrada")).build();
+            }
+
+            // Verificar permisos
+            if (!securityContext.isUserInRole("ADMIN")) {
+                Integer userId = getUserIdFromJWT();
+                if (!actividad.getUsuarioId().equals(userId)) {
+                    return Response.status(Response.Status.FORBIDDEN)
+                            .entity(Map.of("error", "No tienes permiso para modificar esta actividad"))
+                            .build();
+                }
+            }
+
+            ServicioEvento servicio = servicioEventoRepo.findById(servicioId);
+            if (servicio == null || !servicio.getActividadServicio().getId().equals(actividadId)) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity(Map.of("error", "Servicio no encontrado")).build();
+            }
+
+            boolean deleted = servicioEventoRepo.deleteById(servicioId);
+            if (!deleted) {
+                return Response.status(Response.Status.NOT_FOUND).build();
+            }
+
+            return Response.ok(Map.of("message", "Servicio eliminado exitosamente")).build();
+
+        } catch (Exception e) {
+            System.err.println("Error al eliminar servicio: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of("error", "Error interno: " + e.getMessage())).build();
         }
     }
 
