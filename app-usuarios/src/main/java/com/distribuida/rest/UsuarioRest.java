@@ -2,6 +2,7 @@ package com.distribuida.rest;
 
 import com.distribuida.db.Usuario;
 import com.distribuida.repo.UsuarioRepository;
+import com.distribuida.service.S3StorageService;
 import io.quarkus.security.Authenticated;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -30,6 +31,9 @@ public class UsuarioRest {
 
     @Inject
     private UsuarioRepository usuarioRepo;
+
+    @Inject
+    private S3StorageService s3StorageService;
 
     @Inject
     JsonWebToken jwt;
@@ -205,5 +209,145 @@ public class UsuarioRest {
         usuarioRepo.persist(usuario);
 
         return Response.ok().build();
+    }
+
+    /**
+     * NUEVO: Subir/Actualizar imagen de perfil
+     */
+    @PUT
+    @Path("/{id}/imagen-perfil")
+    @RolesAllowed({"ADMIN", "CLIENTE", "PROVEEDOR"})
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response updateImagenPerfil(@PathParam("id") Integer id,
+                                       Map<String, String> body,
+                                       @Context SecurityContext securityContext) {
+        try {
+            System.out.println("Actualizando imagen de perfil usuario ID: " + id);
+
+            Usuario usuario = usuarioRepo.findById(id);
+            if (usuario == null) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity(Map.of("error", "Usuario no encontrado"))
+                        .build();
+            }
+
+            // Verificar permisos
+            if (!securityContext.isUserInRole("ADMIN")) {
+                Integer userId = getUserIdFromJWT();
+                if (!userId.equals(id)) {
+                    return Response.status(Response.Status.FORBIDDEN)
+                            .entity(Map.of("error", "No tienes permiso"))
+                            .build();
+                }
+            }
+
+            String imagenBase64 = body.get("imagenPerfil");
+            if (imagenBase64 == null || imagenBase64.isEmpty()) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(Map.of("error", "La imagen es requerida"))
+                        .build();
+            }
+
+            // Validar imagen
+            s3StorageService.validateImage(imagenBase64);
+
+            String oldImagenUrl = usuario.getImagenPerfil();
+
+            // SUBIR NUEVA IMAGEN A S3
+            String newImagenUrl = s3StorageService.uploadImageFromBase64(
+                    imagenBase64,
+                    "perfiles/" + id,
+                    "perfil_" + id + ".jpg"
+            );
+
+            usuario.setImagenPerfil(newImagenUrl); // GUARDAR URL DE S3
+            usuario.setFechaActualizacion(LocalDateTime.now());
+            usuarioRepo.persist(usuario);
+
+            // Eliminar imagen anterior de S3
+            if (oldImagenUrl != null && !oldImagenUrl.isEmpty()) {
+                s3StorageService.deleteImageByUrl(oldImagenUrl);
+            }
+
+            System.out.println("Imagen de perfil actualizada: " + newImagenUrl);
+
+            return Response.ok(Map.of(
+                    "message", "Imagen de perfil actualizada exitosamente",
+                    "imagenUrl", newImagenUrl
+            )).build();
+
+        } catch (IllegalArgumentException e) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("error", e.getMessage()))
+                    .build();
+        } catch (Exception e) {
+            System.err.println("Error al actualizar imagen de perfil: " + e.getMessage());
+            e.printStackTrace();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of("error", "Error al actualizar imagen: " + e.getMessage()))
+                    .build();
+        }
+    }
+
+    /**
+     * NUEVO: Eliminar imagen de perfil
+     */
+    @DELETE
+    @Path("/{id}/imagen-perfil")
+    @RolesAllowed({"ADMIN", "CLIENTE", "PROVEEDOR"})
+    public Response deleteImagenPerfil(@PathParam("id") Integer id,
+                                       @Context SecurityContext securityContext) {
+        try {
+            Usuario usuario = usuarioRepo.findById(id);
+            if (usuario == null) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity(Map.of("error", "Usuario no encontrado"))
+                        .build();
+            }
+
+            // Verificar permisos
+            if (!securityContext.isUserInRole("ADMIN")) {
+                Integer userId = getUserIdFromJWT();
+                if (!userId.equals(id)) {
+                    return Response.status(Response.Status.FORBIDDEN)
+                            .entity(Map.of("error", "No tienes permiso"))
+                            .build();
+                }
+            }
+
+            // Eliminar de S3
+            if (usuario.getImagenPerfil() != null && !usuario.getImagenPerfil().isEmpty()) {
+                s3StorageService.deleteImageByUrl(usuario.getImagenPerfil());
+                System.out.println("Imagen de perfil eliminada de S3");
+            }
+
+            usuario.setImagenPerfil(null);
+            usuario.setFechaActualizacion(LocalDateTime.now());
+            usuarioRepo.persist(usuario);
+
+            return Response.ok(Map.of("message", "Imagen de perfil eliminada exitosamente")).build();
+
+        } catch (Exception e) {
+            System.err.println("Error al eliminar imagen de perfil: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of("error", e.getMessage()))
+                    .build();
+        }
+    }
+
+    // Agregar este método auxiliar si no existe
+    private Integer getUserIdFromJWT() {
+        try {
+            Object userIdClaim = jwt.getClaim("userId");
+            if (userIdClaim instanceof Number) {
+                return ((Number) userIdClaim).intValue();
+            } else if (userIdClaim instanceof String) {
+                return Integer.valueOf((String) userIdClaim);
+            } else {
+                return Integer.valueOf(userIdClaim.toString());
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Token JWT inválido");
+        }
     }
 }

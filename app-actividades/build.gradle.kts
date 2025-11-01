@@ -52,6 +52,10 @@ dependencies {
     //cache
     implementation("io.quarkus:quarkus-cache:3.24.2")
 
+    // AWS SDK para S3 (versión 2.x compatible con Quarkus)
+    implementation("software.amazon.awssdk:s3:2.20.26")
+    implementation("software.amazon.awssdk:netty-nio-client:2.20.26")
+
 }
 
 tasks.test {

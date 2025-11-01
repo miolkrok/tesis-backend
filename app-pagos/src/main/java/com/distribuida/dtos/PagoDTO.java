@@ -24,6 +24,8 @@ public class PagoDTO {
 
     private String estado;
 
+    private String comprobante;
+
     private LocalDateTime fechaTransaccion;
 
     private LocalDateTime fechaActualizacion;

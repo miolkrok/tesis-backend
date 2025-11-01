@@ -46,6 +46,10 @@ dependencies {
     implementation("io.quarkus:quarkus-smallrye-jwt")
     implementation("io.quarkus:quarkus-smallrye-jwt-build")
     implementation("io.quarkus:quarkus-security-jpa")
+
+    // AWS SDK para S3 (versión 2.x compatible con Quarkus)
+    implementation("software.amazon.awssdk:s3:2.20.26")
+    implementation("software.amazon.awssdk:netty-nio-client:2.20.26")
 }
 
 tasks.test {
