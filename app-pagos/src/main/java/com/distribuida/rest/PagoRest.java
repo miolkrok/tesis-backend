@@ -5,6 +5,7 @@ import com.distribuida.db.Pago;
 import com.distribuida.dtos.PagoDTO;
 import com.distribuida.repo.PagoRepository;
 import com.distribuida.service.S3StorageService;
+import com.distribuida.service.S3StorageServiceMinio;
 import jakarta.annotation.security.PermitAll;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -38,7 +39,7 @@ public class PagoRest {
     ReservaRestClient reservaRestClient;
 
     @Inject
-    private S3StorageService s3StorageService;
+    private S3StorageServiceMinio s3StorageService;
 
     @Inject
     JsonWebToken jwt;
