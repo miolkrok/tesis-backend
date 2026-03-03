@@ -16,9 +16,9 @@ public class Galeria {
     @Column(name="url_foto")
     private String urlFoto;
 
-    @Lob
-    @Column(name = "imagen_binaria")
-    private byte[] imagenBinaria;
+    //@Lob
+    //@Column(name = "imagen_binaria")
+    //private byte[] imagenBinaria;
 
     @Column(name = "nombre_archivo")
     private String nombreArchivo;

@@ -28,12 +28,6 @@ public class ImageService {
         dto.setTamanoArchivo(galeria.getTamanoArchivo());
         dto.setEsImagenPrincipal(galeria.getEsImagenPrincipal());
 
-        // Convertir imagen binaria a Base64 si existe
-        if (galeria.getImagenBinaria() != null) {
-            String base64Image = Base64.getEncoder().encodeToString(galeria.getImagenBinaria());
-            dto.setImagenBinaria(base64Image);
-        }
-
         return dto;
     }
 
@@ -45,16 +39,6 @@ public class ImageService {
         galeria.setTipoContenido(dto.getTipoContenido());
         galeria.setTamanoArchivo(dto.getTamanoArchivo());
         galeria.setEsImagenPrincipal(dto.getEsImagenPrincipal());
-
-        // Convertir imagen Base64 a binario si existe
-        if (dto.getImagenBinaria() != null && !dto.getImagenBinaria().isEmpty()) {
-            try {
-                byte[] imageBytes = Base64.getDecoder().decode(dto.getImagenBinaria());
-                galeria.setImagenBinaria(imageBytes);
-            } catch (Exception e) {
-                System.err.println("Error al decodificar imagen Base64: " + e.getMessage());
-            }
-        }
 
         return galeria;
     }

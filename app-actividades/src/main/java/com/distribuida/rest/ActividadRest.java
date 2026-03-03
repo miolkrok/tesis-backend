@@ -9,6 +9,7 @@ import com.distribuida.dtos.*;
 import com.distribuida.repo.ActividadRepository;
 import com.distribuida.repo.GaleriaRepository;
 import com.distribuida.repo.ServicioEventoRepository;
+import com.distribuida.service.AzureBlobStorageService;
 import com.distribuida.service.ImageService;
 import io.quarkus.security.Authenticated;
 import jakarta.annotation.security.PermitAll;
@@ -63,6 +64,10 @@ public class ActividadRest {
     @RestClient
     BusquedaRestClient busquedaRestClient;
 
+    @Inject
+    private AzureBlobStorageService storageService;
+
+
     @GET
     @PermitAll  // Público para permitir búsqueda sin login
     public List<ActividadDTO> findAll() {
@@ -93,7 +98,7 @@ public class ActividadRest {
         }
     }
 
-    @POST
+    /*@POST
     @PermitAll
     public Response create(Actividad actividad) {
         try {
@@ -120,6 +125,11 @@ public class ActividadRest {
                 }
             }
 
+            // Separar galeria - se procesa despues
+            List<Galeria> galeriaOriginal = actividad.getGaleria();
+            actividad.setGaleria(null);
+
+
             if (actividad.getServicioEvento() != null) {
                 for (ServicioEvento servicio : actividad.getServicioEvento()) {
                     servicio.setId(null);
@@ -130,6 +140,137 @@ public class ActividadRest {
             //Guardar en la base de datos principal
             actividadRepo.persist(actividad);
             System.out.println("Actividad creada exitosamente con ID: " + actividad.getId());
+
+            // Persistir solo galerias que ya tengan urlFoto
+            if (galeriaOriginal != null) {
+                for (Galeria galeria : galeriaOriginal) {
+                    if (galeria.getUrlFoto() != null
+                            && !galeria.getUrlFoto().isEmpty()) {
+                        galeria.setId(null);
+                        galeria.setActividad(actividad);
+                        galeriaRepo.persist(galeria);
+                    }
+                }
+            }
+
+
+            // Sincronizar con el módulo de búsqueda
+            try {
+                sincronizarConBusqueda(actividad, "CREATE");
+            } catch (Exception e) {
+                System.err.println("Error al sincronizar con búsqueda: " + e.getMessage());
+                // No fallar la creación si la sincronización falla
+            }
+
+            return Response.status(Response.Status.CREATED).entity(convertToDTO(actividad)).build();
+        } catch (Exception e) {
+            System.err.println("Error al crear actividad: " + e.getMessage());
+            e.printStackTrace();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity("Error al crear actividad: " + e.getMessage()).build();
+        }
+    }*/
+
+    @POST
+    @PermitAll
+    public Response create(ActividadDTO actividadDTO) {
+        try {
+            Integer userId = getUserIdFromJWT();
+            String userRole = getUserRoleFromJWT();
+
+            System.out.println("Creando actividad para usuario: " + userId + " | Rol: " + userRole);
+
+            // Mapear DTO a entidad
+            Actividad actividad = new Actividad();
+            actividad.setUsuarioId(userId);
+            actividad.setTitulo(actividadDTO.getTitulo());
+            actividad.setDescripcion(actividadDTO.getDescripcion());
+            actividad.setUbicacionDestino(actividadDTO.getUbicacionDestino());
+            actividad.setUbicacionSalida(actividadDTO.getUbicacionSalida());
+            actividad.setTipoActividad(actividadDTO.getTipoActividad());
+            actividad.setNivelDificultad(actividadDTO.getNivelDificultad());
+            actividad.setPrecio(actividadDTO.getPrecio());
+            actividad.setDuracion(actividadDTO.getDuracion());
+            actividad.setDisponibilidad(actividadDTO.getDisponibilidad());
+            actividad.setMaximoPersonas(actividadDTO.getMaximoPersonas());
+            actividad.setMinimoPersonas(actividadDTO.getMinimoPersonas());
+            actividad.setEstadoActividad(actividadDTO.getEstadoActividad() != null ? actividadDTO.getEstadoActividad() : "ACTIVA");
+            actividad.setFechaInicioDisponible(actividadDTO.getFechaInicioDisponible());
+            actividad.setFechaFinDisponible(actividadDTO.getFechaFinDisponible());
+            actividad.setProvincia(actividadDTO.getProvincia());
+            actividad.setCiudad(actividadDTO.getCiudad());
+            actividad.setLatitud(actividadDTO.getLatitud());
+            actividad.setLongitud(actividadDTO.getLongitud());
+
+            if (actividadDTO.getFechaCreacion() != null) {
+                actividad.setFechaCreacion(actividadDTO.getFechaCreacion());
+            } else {
+                actividad.setFechaCreacion(LocalDateTime.now());
+            }
+            if (actividadDTO.getFechaActualizacion() != null) {
+                actividad.setFechaActualizacion(actividadDTO.getFechaActualizacion());
+            } else {
+                actividad.setFechaActualizacion(LocalDateTime.now());
+            }
+
+            // Mapear servicios
+            if (actividadDTO.getServicioEvento() != null) {
+                List<ServicioEvento> servicios = new java.util.ArrayList<>();
+                for (ServicioEventoDTO sDto : actividadDTO.getServicioEvento()) {
+                    ServicioEvento servicio = new ServicioEvento();
+                    servicio.setListaServicio(sDto.getListaServicio());
+                    servicio.setActividadServicio(actividad);
+                    servicios.add(servicio);
+                }
+                actividad.setServicioEvento(servicios);
+            }
+
+            // Persistir actividad SIN galería primero (necesitamos el ID)
+            actividadRepo.persist(actividad);
+            System.out.println("Actividad creada exitosamente con ID: " + actividad.getId());
+
+            // Procesar galería: subir cada imagen a Azure y guardar urlFoto
+            if (actividadDTO.getGaleria() != null && !actividadDTO.getGaleria().isEmpty()) {
+                List<Galeria> galeriaList = new java.util.ArrayList<>();
+                for (GaleriaDTO gDto : actividadDTO.getGaleria()) {
+                    Galeria galeria = new Galeria();
+                    galeria.setActividad(actividad);
+                    galeria.setNombreArchivo(gDto.getNombreArchivo());
+                    galeria.setTipoContenido(gDto.getTipoContenido());
+                    galeria.setTamanoArchivo(gDto.getTamanoArchivo());
+                    galeria.setEsImagenPrincipal(gDto.getEsImagenPrincipal());
+
+                    // Si viene imagenBinaria (Base64), subir a Azure y obtener URL
+                    if (gDto.getImagenBinaria() != null && !gDto.getImagenBinaria().isEmpty()) {
+                        try {
+                            storageService.validateImage(gDto.getImagenBinaria());
+                            String imageUrl = storageService.uploadImageFromBase64(
+                                    gDto.getImagenBinaria(),
+                                    "actividades/" + actividad.getId(),
+                                    gDto.getNombreArchivo()
+                            );
+                            galeria.setUrlFoto(imageUrl);
+                            System.out.println("Imagen subida a Azure: " + imageUrl);
+                        } catch (Exception e) {
+                            System.err.println("Error al subir imagen: " + e.getMessage());
+                            // Si falla el upload, usar urlFoto del DTO si existe
+                            if (gDto.getUrlFoto() != null && !gDto.getUrlFoto().isEmpty()) {
+                                galeria.setUrlFoto(gDto.getUrlFoto());
+                            }
+                        }
+                    } else if (gDto.getUrlFoto() != null && !gDto.getUrlFoto().isEmpty()) {
+                        // Si no viene Base64 pero sí viene URL directa
+                        galeria.setUrlFoto(gDto.getUrlFoto());
+                    }
+
+                    // Solo persistir si tiene URL (imagen fue subida exitosamente)
+                    if (galeria.getUrlFoto() != null && !galeria.getUrlFoto().isEmpty()) {
+                        galeriaRepo.persist(galeria);
+                        galeriaList.add(galeria);
+                    }
+                }
+                actividad.setGaleria(galeriaList);
+            }
 
             // Sincronizar con el módulo de búsqueda
             try {
@@ -147,7 +288,6 @@ public class ActividadRest {
                     .entity("Error al crear actividad: " + e.getMessage()).build();
         }
     }
-
 
     @PUT
     @Path("/{id}")
@@ -356,25 +496,26 @@ public class ActividadRest {
         }
 
         // Actualizar imagen binaria si se proporciona
-        if (dto.getImagenBinaria() != null && !dto.getImagenBinaria().isEmpty()) {
-            try {
-                String cleanBase64 = dto.getImagenBinaria();
-                if (cleanBase64.contains(",")) {
-                    cleanBase64 = cleanBase64.split(",")[1];
-                }
+        if (dto.getImagenBinaria() != null
+                && !dto.getImagenBinaria().isEmpty()) {
+            storageService.validateImage(
+                    dto.getImagenBinaria());
 
-                byte[] imageBytes = Base64.getDecoder().decode(cleanBase64);
+            String oldUrl = galeria.getUrlFoto();
 
-                // Validar tamaño máximo (10MB)
-                if (imageBytes.length > 10 * 1024 * 1024) {
-                    throw new IllegalArgumentException("Imagen demasiado grande");
-                }
-
-                galeria.setImagenBinaria(imageBytes);
-            } catch (IllegalArgumentException e) {
-                throw new BadRequestException("Imagen inválida: " + e.getMessage());
+            String newUrl = storageService
+                    .uploadImageFromBase64(
+                            dto.getImagenBinaria(),
+                            "actividades/" + (galeria.getActividad()
+                                    != null ? galeria.getActividad()
+                                    .getId() : "temp"),
+                            dto.getNombreArchivo());
+            galeria.setUrlFoto(newUrl);
+            if (oldUrl != null && !oldUrl.isEmpty()) {
+                storageService.deleteImageByUrl(oldUrl);
             }
         }
+
     }
 
 
@@ -803,26 +944,20 @@ public class ActividadRest {
             nuevaImagen.setEsImagenPrincipal(galeriaDTO.getEsImagenPrincipal());
             nuevaImagen.setActividad(actividad); // IMPORTANTE: Establecer relación
 
-            // Procesar imagen Base64 si existe
-            if (galeriaDTO.getImagenBinaria() != null && !galeriaDTO.getImagenBinaria().isEmpty()) {
-                try {
-                    String cleanBase64 = galeriaDTO.getImagenBinaria();
-                    if (cleanBase64.contains(",")) {
-                        cleanBase64 = cleanBase64.split(",")[1];
-                    }
+            // Subir imagen a Azure Blob Storage
+            if (galeriaDTO.getImagenBinaria() != null
+                    && !galeriaDTO.getImagenBinaria().isEmpty()) {
+                storageService.validateImage(
+                        galeriaDTO.getImagenBinaria());
 
-                    byte[] imageBytes = Base64.getDecoder().decode(cleanBase64);
-
-                    if (imageBytes.length > 10 * 1024 * 1024) {
-                        throw new IllegalArgumentException("Imagen demasiado grande");
-                    }
-
-                    nuevaImagen.setImagenBinaria(imageBytes);
-                } catch (IllegalArgumentException e) {
-                    return Response.status(Response.Status.BAD_REQUEST)
-                            .entity(Map.of("error", "Imagen inválida: " + e.getMessage())).build();
-                }
+                String imageUrl = storageService
+                        .uploadImageFromBase64(
+                                galeriaDTO.getImagenBinaria(),
+                                "actividades/" + actividadId,
+                                galeriaDTO.getNombreArchivo());
+                nuevaImagen.setUrlFoto(imageUrl);
             }
+
 
             // Si es imagen principal, quitar bandera de otras
             if (Boolean.TRUE.equals(galeriaDTO.getEsImagenPrincipal())) {
@@ -1079,12 +1214,6 @@ public class ActividadRest {
         dto.setTipoContenido(galeria.getTipoContenido());
         dto.setTamanoArchivo(galeria.getTamanoArchivo());
         dto.setEsImagenPrincipal(galeria.getEsImagenPrincipal());
-
-        // Convertir imagen binaria a Base64 si existe
-        if (galeria.getImagenBinaria() != null) {
-            String base64Image = Base64.getEncoder().encodeToString(galeria.getImagenBinaria());
-            dto.setImagenBinaria(base64Image);
-        }
 
         return dto;
     }

@@ -35,7 +35,7 @@ services:
     build: ./app-actividades
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.actividades.rule=PathPrefix(`/actividades`)"
+      - "traefik.http.routers.actividades.rule=PathPrefix(`/actividades`) || PathPrefix(`/imagenes`)"
       - "traefik.http.routers.actividades.entrypoints=web"
       - "traefik.http.services.actividades.loadbalancer.server.port=8090"
     container_name: actividades-service
@@ -43,6 +43,13 @@ services:
       - "8090"
     networks:
       - microservices-network
+    environment:
+      - JAVA_OPTS=-Xmx512m -Xms256m
+      # URLs de servicios internos Docker (NO localhost)
+      - QUARKUS_REST_CLIENT_PROVEEDORRESTCLIENT_URL=http://usuarios-service:8080
+      - QUARKUS_REST_CLIENT_USUARIORESTCLIENT_URL=http://usuarios-service:8080
+      - QUARKUS_REST_CLIENT_RESERVARESTCLIENT_URL=http://reservas-service:9080
+      - QUARKUS_REST_CLIENT_BUSQUEDARESTCLIENT_URL=http://filtros-busqueda-service:8070
     depends_on:
       - usuarios
 
@@ -112,9 +119,9 @@ services:
     build: ./app-pagos
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.reservas.rule=PathPrefix(`/pagos`)"
-      - "traefik.http.routers.reservas.entrypoints=web"
-      - "traefik.http.services.reservas.loadbalancer.server.port=9090"
+      - "traefik.http.routers.pagos.rule=PathPrefix(`/pagos`)"
+      - "traefik.http.routers.pagos.entrypoints=web"
+      - "traefik.http.services.pagos.loadbalancer.server.port=9090"
     container_name: pagos-service
     expose:
       - "9080"
@@ -133,26 +140,17 @@ networks:
   microservices-network:
     driver: bridge
 
-  #notificaciones:
-    #build: ./app-notificaciones
-    #labels:
+
+      #notificaciones:
+      #build: ./app-notificaciones
+      #labels:
       #- "traefik.enable=true"
       #- "traefik.http.routers.notificaciones.rule=PathPrefix(`/notificaciones`) || PathPrefix(`/preferencias`)"
       #- "traefik.http.routers.notificaciones.entrypoints=web"
       #- "traefik.http.services.notificaciones.loadbalancer.server.port=8075"
-    #container_name: notificaciones-service
-    #expose:
-      #- "8075"
-  #pagos:
-    #build: ./app-pagos
-    #labels:
-      #- "traefik.enable=true"
-      #- "traefik.http.routers.pagos.rule=PathPrefix(`/pagos`) || PathPrefix(`/reembolsos`)"
-      #- "traefik.http.routers.pagos.entrypoints=web"
-      #- "traefik.http.services.pagos.loadbalancer.server.port=9090"
-    #container_name: pagos-service
-    #expose:
-      #- "9090"
+      #container_name: notificaciones-service
+      #expose:
+    #- "8075"
 
 # Ahora puedes acceder a:
 # http://localhost:8888/usuarios/auth/login -> usuarios (sin /usuarios en la petición interna)

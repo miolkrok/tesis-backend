@@ -322,8 +322,8 @@ public class BusquedaRest {
             var response = galeriaRestClient.getImagenPrincipal(actividadId);
             if (response.getStatus() == 200) {
                 Map<String, Object> imagenData = response.readEntity(Map.class);
-                if (imagenData != null && imagenData.get("imagenBinaria") != null) {
-                    String imagen = (String) imagenData.get("imagenBinaria");
+                if (imagenData != null && imagenData.get("urlFoto") != null) {
+                    String imagen = (String) imagenData.get("urlFoto");
 
                     // Cachear resultado
                     imagenCache.put(actividadId, imagen);
@@ -1082,8 +1082,8 @@ public class BusquedaRest {
                     var responseImagen = galeriaRestClient.getImagenPrincipal(actividad.getId());
                     if (responseImagen.getStatus() == 200) {
                         Map<String, Object> imagenData = responseImagen.readEntity(Map.class);
-                        if (imagenData != null && imagenData.get("imagenBinaria") != null) {
-                            return (String) imagenData.get("imagenBinaria");
+                        if (imagenData != null && imagenData.get("urlFoto") != null) {
+                            return (String) imagenData.get("urlFoto");
                         }
                     }
                 } catch (Exception e) {

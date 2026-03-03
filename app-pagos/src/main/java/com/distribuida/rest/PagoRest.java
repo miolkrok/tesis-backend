@@ -4,8 +4,7 @@ import com.distribuida.clients.ReservaRestClient;
 import com.distribuida.db.Pago;
 import com.distribuida.dtos.PagoDTO;
 import com.distribuida.repo.PagoRepository;
-import com.distribuida.service.S3StorageService;
-import com.distribuida.service.S3StorageServiceMinio;
+import com.distribuida.service.AzureBlobStorageService;
 import jakarta.annotation.security.PermitAll;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -39,7 +38,7 @@ public class PagoRest {
     ReservaRestClient reservaRestClient;
 
     @Inject
-    private S3StorageServiceMinio s3StorageService;
+    private AzureBlobStorageService storageService;
 
     @Inject
     JsonWebToken jwt;
@@ -111,9 +110,9 @@ public class PagoRest {
             //SUBIR COMPROBANTE A S3 (si se envió)
             if (pago.getImagenComprobante() != null && !pago.getImagenComprobante().isEmpty()) {
                 try {
-                    s3StorageService.validateImage(pago.getImagenComprobante());
+                    storageService.validateImage(pago.getImagenComprobante());
 
-                    String s3Url = s3StorageService.uploadImageFromBase64(
+                    String s3Url = storageService.uploadImageFromBase64(
                             pago.getImagenComprobante(),
                             "comprobantes/" + userId,
                             "comprobante_" + System.currentTimeMillis() + ".jpg"
@@ -151,6 +150,7 @@ public class PagoRest {
      */
     @PUT
     @Path("/{id}")
+    @RolesAllowed({"ADMIN", "CLIENTE"})
     public Response update(@PathParam("id") Integer id, Pago pago, @Context SecurityContext securityContext) {
         try {
             Pago obj = pagoRepo.findById(id);
@@ -185,9 +185,9 @@ public class PagoRest {
             if (pago.getImagenComprobante() != null && !pago.getImagenComprobante().isEmpty()) {
                 // Solo actualizar si es una imagen Base64 nueva (no URL)
                 if (pago.getImagenComprobante().startsWith("data:image")) {
-                    s3StorageService.validateImage(pago.getImagenComprobante());
+                    storageService.validateImage(pago.getImagenComprobante());
 
-                    String newUrl = s3StorageService.uploadImageFromBase64(
+                    String newUrl = storageService.uploadImageFromBase64(
                             pago.getImagenComprobante(),
                             "comprobantes/" + obj.getUsuarioId(),
                             "comprobante_" + System.currentTimeMillis() + ".jpg"
@@ -197,7 +197,7 @@ public class PagoRest {
 
                     // Eliminar comprobante anterior
                     if (oldComprobanteUrl != null && !oldComprobanteUrl.isEmpty()) {
-                        s3StorageService.deleteImageByUrl(oldComprobanteUrl);
+                        storageService.deleteImageByUrl(oldComprobanteUrl);
                     }
 
                     System.out.println("Comprobante actualizado en S3: " + newUrl);
@@ -232,7 +232,7 @@ public class PagoRest {
 
             // Eliminar comprobante de S3
             if (pago.getImagenComprobante() != null && !pago.getImagenComprobante().isEmpty()) {
-                s3StorageService.deleteImageByUrl(pago.getImagenComprobante());
+                storageService.deleteImageByUrl(pago.getImagenComprobante());
                 System.out.println("Comprobante eliminado de S3");
             }
 

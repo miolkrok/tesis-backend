@@ -2,7 +2,7 @@ package com.distribuida.rest;
 
 import com.distribuida.db.Usuario;
 import com.distribuida.repo.UsuarioRepository;
-import com.distribuida.service.S3StorageService;
+import com.distribuida.service.AzureBlobStorageService;
 import io.quarkus.security.Authenticated;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -15,7 +15,6 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.SecurityContext;
 import org.eclipse.microprofile.jwt.JsonWebToken;
-import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -33,7 +32,7 @@ public class UsuarioRest {
     private UsuarioRepository usuarioRepo;
 
     @Inject
-    private S3StorageService s3StorageService;
+    private AzureBlobStorageService storageService;
 
     @Inject
     JsonWebToken jwt;
@@ -249,12 +248,12 @@ public class UsuarioRest {
             }
 
             // Validar imagen
-            s3StorageService.validateImage(imagenBase64);
+            storageService.validateImage(imagenBase64);
 
             String oldImagenUrl = usuario.getImagenPerfil();
 
             // SUBIR NUEVA IMAGEN A S3
-            String newImagenUrl = s3StorageService.uploadImageFromBase64(
+            String newImagenUrl = storageService.uploadImageFromBase64(
                     imagenBase64,
                     "perfiles/" + id,
                     "perfil_" + id + ".jpg"
@@ -266,8 +265,9 @@ public class UsuarioRest {
 
             // Eliminar imagen anterior de S3
             if (oldImagenUrl != null && !oldImagenUrl.isEmpty()) {
-                s3StorageService.deleteImageByUrl(oldImagenUrl);
+                storageService.deleteImageByUrl(oldImagenUrl);
             }
+
 
             System.out.println("Imagen de perfil actualizada: " + newImagenUrl);
 
@@ -317,7 +317,8 @@ public class UsuarioRest {
 
             // Eliminar de S3
             if (usuario.getImagenPerfil() != null && !usuario.getImagenPerfil().isEmpty()) {
-                s3StorageService.deleteImageByUrl(usuario.getImagenPerfil());
+                storageService.deleteImageByUrl(usuario.getImagenPerfil());
+
                 System.out.println("Imagen de perfil eliminada de S3");
             }
 
