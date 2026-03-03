@@ -879,7 +879,7 @@ public class BusquedaRest {
      */
     @POST
     @Path("/indexar")
-    @RolesAllowed({"PROVEEDOR", "ADMIN"})
+    @PermitAll // Llamado internamente desde app-actividades
     public Response indexarActividad(BusquedaActividadDTO actividadDTO) {
         try {
             System.out.println("Indexando nueva actividad: " + actividadDTO.getActividadId());
@@ -909,7 +909,7 @@ public class BusquedaRest {
      */
     @PUT
     @Path("/indexar/{actividadId}")
-    @RolesAllowed({"PROVEEDOR", "ADMIN"})
+    @PermitAll // Llamado internamente desde app-actividades
     public Response actualizarIndice(@PathParam("actividadId") Integer actividadId,
                                      BusquedaActividadDTO actividadDTO) {
         try {
@@ -943,7 +943,7 @@ public class BusquedaRest {
      */
     @DELETE
     @Path("/indexar/{actividadId}")
-    @RolesAllowed({"PROVEEDOR", "ADMIN"})
+    @PermitAll // Llamado internamente desde app-actividades
     public Response eliminarDeBusqueda(@PathParam("actividadId") Integer actividadId) {
         try {
             System.out.println("Eliminando de indice actividad: " + actividadId);
