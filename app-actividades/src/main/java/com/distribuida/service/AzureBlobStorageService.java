@@ -19,14 +19,18 @@ import java.util.UUID;
 public class AzureBlobStorageService {
     private final BlobContainerClient containerClient;
     private final String containerName;
+    private final String publicEndpoint; // URL pública accesible desde Android
 
     public AzureBlobStorageService(
             @ConfigProperty(name = "azure.storage.connection-string")
             String connectionString,
             @ConfigProperty(name = "azure.storage.container-name")
-            String containerName) {
+            String containerName,
+            @ConfigProperty(name = "azure.storage.public-endpoint", defaultValue = "")
+            String publicEndpoint) {
 
         this.containerName = containerName;
+        this.publicEndpoint = publicEndpoint;
 
         // Crear cliente del servicio Blob
         BlobServiceClient serviceClient =
@@ -119,6 +123,15 @@ public class AzureBlobStorageService {
 
             // 9. Obtener y retornar URL pública
             String publicUrl = blobClient.getBlobUrl();
+
+            // Reemplazar host interno de Docker por URL pública
+            // para que Android pueda acceder a la imagen
+            if (publicEndpoint != null && !publicEndpoint.isEmpty()) {
+                // Extraer la parte después del container name
+                String blobPath = "/" + containerName + "/" + blobName;
+                publicUrl = publicEndpoint + blobPath;
+            }
+
             System.out.println(
                     "Imagen subida a Azure: " + publicUrl);
 

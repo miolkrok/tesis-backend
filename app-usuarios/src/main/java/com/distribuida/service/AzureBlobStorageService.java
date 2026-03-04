@@ -21,14 +21,18 @@ public class AzureBlobStorageService {
 
     private final BlobContainerClient containerClient;
     private final String containerName;
+    private final String publicEndpoint; // URL pública accesible desde Android
 
     public AzureBlobStorageService(
             @ConfigProperty(name = "azure.storage.connection-string")
             String connectionString,
             @ConfigProperty(name = "azure.storage.container-name")
-            String containerName) {
+            String containerName,
+            @ConfigProperty(name = "azure.storage.public-endpoint", defaultValue = "")
+            String publicEndpoint) {
 
         this.containerName = containerName;
+        this.publicEndpoint = publicEndpoint;
 
         // Crear cliente del servicio Blob
         BlobServiceClient serviceClient =
@@ -78,7 +82,14 @@ public class AzureBlobStorageService {
                 cleanBase64 = base64Image.split(",")[1];
             }
 
-            // 2. Decodificar Base64 a bytes puros
+            // 2. Limpiar saltos de línea y espacios
+            // Android Base64.DEFAULT agrega \n cada 76 chars
+            cleanBase64 = cleanBase64
+                    .replace("\n", "")
+                    .replace("\r", "")
+                    .replace(" ", "");
+
+            // 3. Decodificar Base64 a bytes puros
             byte[] imageBytes = Base64.getDecoder()
                     .decode(cleanBase64);
 
@@ -114,6 +125,15 @@ public class AzureBlobStorageService {
 
             // 9. Obtener y retornar URL pública
             String publicUrl = blobClient.getBlobUrl();
+
+            // Reemplazar host interno de Docker por URL pública
+            // para que Android pueda acceder a la imagen
+            if (publicEndpoint != null && !publicEndpoint.isEmpty()) {
+                // Extraer la parte después del container name
+                String blobPath = "/" + containerName + "/" + blobName;
+                publicUrl = publicEndpoint + blobPath;
+            }
+
             System.out.println(
                     "Imagen subida a Azure: " + publicUrl);
 
@@ -176,6 +196,12 @@ public class AzureBlobStorageService {
         if (base64Image.contains(",")) {
             cleanBase64 = base64Image.split(",")[1];
         }
+
+        // Limpiar saltos de línea (Android Base64.DEFAULT)
+        cleanBase64 = cleanBase64
+                .replace("\n", "")
+                .replace("\r", "")
+                .replace(" ", "");
 
         try {
             byte[] imageBytes = Base64.getDecoder()
