@@ -115,6 +115,59 @@ public class ReservaRest {
             // Asignar automáticamente el usuario del JWT
             reservaDTO.setUsuarioId(userId);
 
+            // VALIDACIÓN DE CUPO POR FECHA
+            if (reservaDTO.getFechaActividad() != null && reservaDTO.getCantidadPersonas() != null) {
+                // Obtener todas las reservas para esta actividad en la misma fecha
+                // (comparando solo la fecha, sin hora)
+                LocalDateTime fechaInicio = reservaDTO.getFechaActividad().toLocalDate().atStartOfDay();
+                LocalDateTime fechaFin = fechaInicio.plusDays(1);
+
+                List<Reserva> reservasExistentes = reservaRepo.find(
+                        "actividadId = ?1 AND fechaActividad >= ?2 AND fechaActividad < ?3 AND estado != ?4",
+                        reservaDTO.getActividadId(), fechaInicio, fechaFin, "CANCELADA"
+                ).list();
+
+                // Sumar las personas ya reservadas
+                int personasReservadas = reservasExistentes.stream()
+                        .mapToInt(r -> r.getCantidadPersonas() != null ? r.getCantidadPersonas() : 0)
+                        .sum();
+
+                // Obtener capacidad máxima de la actividad
+                int maxPeople = 20; // Valor por defecto
+                try {
+                    var actividad = actividadRestClient.findById(reservaDTO.getActividadId());
+                    maxPeople = actividad.getMaxPersonas();
+                    System.out.println("Capacidad máxima de actividad: " + maxPeople);
+                } catch (Exception e) {
+                    System.err.println("No se pudo obtener capacidad máxima, usando valor por defecto: " + maxPeople);
+                }
+
+                int personasSolicitadas = reservaDTO.getCantidadPersonas();
+                int cupoDisponible = maxPeople - personasReservadas;
+
+                System.out.println("Cupo: " + personasReservadas + "/" + maxPeople +
+                        " reservadas | Solicitadas: " + personasSolicitadas +
+                        " | Disponible: " + cupoDisponible);
+
+                if (personasSolicitadas > cupoDisponible) {
+                    String mensaje;
+                    if (cupoDisponible <= 0) {
+                        mensaje = "No hay cupo disponible para esta fecha. La actividad está completa.";
+                    } else {
+                        mensaje = "Solo quedan " + cupoDisponible + " cupos disponibles para esta fecha. " +
+                                "Solicitaste " + personasSolicitadas + " personas.";
+                    }
+
+                    return Response.status(Response.Status.CONFLICT)
+                            .entity(Map.of(
+                                    "error", mensaje,
+                                    "cupoDisponible", cupoDisponible,
+                                    "personasReservadas", personasReservadas,
+                                    "maxPeople", maxPeople
+                            )).build();
+                }
+            }
+
             // VALIDACIONES OPCIONALES CON MANEJO DE ERRORES MEJORADO
             boolean skipExternalValidation = false;
 
@@ -285,7 +338,7 @@ public class ReservaRest {
         } catch (Exception e) {
             System.err.println("Error al eliminar reserva: " + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
-            }
+        }
     }
 
     @GET
@@ -371,6 +424,68 @@ public class ReservaRest {
         } catch (Exception e) {
             System.err.println("Error al cambiar estado de reserva: " + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * Consultar disponibilidad de cupo para una actividad en una fecha.
+     * Retorna cuántas personas ya reservaron y cuánto cupo queda.
+     */
+    @GET
+    @Path("/disponibilidad/{actividadId}")
+    @PermitAll
+    public Response getDisponibilidad(
+            @PathParam("actividadId") Integer actividadId,
+            @QueryParam("fecha") String fechaStr) {
+        try {
+            if (fechaStr == null || fechaStr.isEmpty()) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(Map.of("error", "La fecha es requerida (formato: yyyy-MM-dd)"))
+                        .build();
+            }
+
+            // Parsear la fecha
+            java.time.LocalDate fecha = java.time.LocalDate.parse(fechaStr);
+            LocalDateTime fechaInicio = fecha.atStartOfDay();
+            LocalDateTime fechaFin = fechaInicio.plusDays(1);
+
+            // Buscar reservas existentes para esa actividad y fecha (excluyendo canceladas)
+            List<Reserva> reservasExistentes = reservaRepo.find(
+                    "actividadId = ?1 AND fechaActividad >= ?2 AND fechaActividad < ?3 AND estado != ?4",
+                    actividadId, fechaInicio, fechaFin, "CANCELADA"
+            ).list();
+
+            int personasReservadas = reservasExistentes.stream()
+                    .mapToInt(r -> r.getCantidadPersonas() != null ? r.getCantidadPersonas() : 0)
+                    .sum();
+
+            // Obtener capacidad máxima
+            int maxPeople = 20;
+            try {
+                var actividad = actividadRestClient.findById(actividadId);
+                maxPeople = actividad.getMaxPersonas();
+            } catch (Exception e) {
+                System.err.println("No se pudo obtener capacidad máxima: " + e.getMessage());
+            }
+
+            int cupoDisponible = Math.max(0, maxPeople - personasReservadas);
+            boolean disponible = cupoDisponible > 0;
+
+            return Response.ok(Map.of(
+                    "actividadId", actividadId,
+                    "fecha", fechaStr,
+                    "maxPeople", maxPeople,
+                    "personasReservadas", personasReservadas,
+                    "cupoDisponible", cupoDisponible,
+                    "disponible", disponible,
+                    "totalReservas", reservasExistentes.size()
+            )).build();
+
+        } catch (Exception e) {
+            System.err.println("Error al consultar disponibilidad: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of("error", "Error al consultar disponibilidad: " + e.getMessage()))
+                    .build();
         }
     }
 

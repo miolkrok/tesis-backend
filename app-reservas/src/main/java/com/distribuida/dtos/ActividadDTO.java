@@ -50,6 +50,8 @@ public class ActividadDTO {
 
     private String estadoActividad;
 
+    private Integer maxPersonas;
+
     private LocalDateTime fechaCreacion;
 
     private LocalDateTime fechaActualizacion;
