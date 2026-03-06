@@ -336,6 +336,56 @@ public class UsuarioRest {
         }
     }
 
+    /**
+     * Permite a un CLIENTE convertirse en PROVEEDOR (operador turístico).
+     * Solo el propio usuario puede solicitar el cambio de rol.
+     */
+    @PUT
+    @Path("/convertir-proveedor")
+    @RolesAllowed({"CLIENTE"})
+    public Response convertirAProveedor(@Context SecurityContext securityContext) {
+        try {
+            Integer userId = getUserIdFromJWT();
+            System.out.println("Usuario " + userId + " solicita convertirse en PROVEEDOR");
+
+            Usuario usuario = usuarioRepo.findById(userId);
+            if (usuario == null) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity(Map.of("error", "Usuario no encontrado"))
+                        .build();
+            }
+
+            // Verificar que actualmente es CLIENTE
+            if ("PROVEEDOR".equalsIgnoreCase(usuario.getRol())) {
+                return Response.status(Response.Status.CONFLICT)
+                        .entity(Map.of(
+                                "error", "Ya eres operador turístico",
+                                "rol", usuario.getRol()
+                        ))
+                        .build();
+            }
+
+            // Cambiar rol a PROVEEDOR
+            usuario.setRol("PROVEEDOR");
+            usuario.setFechaActualizacion(LocalDateTime.now());
+            usuarioRepo.persist(usuario);
+
+            System.out.println("Usuario " + userId + " ahora es PROVEEDOR");
+
+            return Response.ok(Map.of(
+                    "message", "¡Felicidades! Ahora eres operador turístico.",
+                    "rol", "PROVEEDOR",
+                    "userId", userId
+            )).build();
+
+        } catch (Exception e) {
+            System.err.println("Error al convertir a proveedor: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of("error", "Error al actualizar rol: " + e.getMessage()))
+                    .build();
+        }
+    }
+
     // Agregar este método auxiliar si no existe
     private Integer getUserIdFromJWT() {
         try {
