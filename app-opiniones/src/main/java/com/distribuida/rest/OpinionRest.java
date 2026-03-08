@@ -72,7 +72,7 @@ public class OpinionRest {
     }
 
     @POST
-    @RolesAllowed({"CLIENTE", "ADMIN"})
+    @RolesAllowed({"CLIENTE", "PROVEEDOR", "ADMIN"})
     public Response create(@Valid OpinionDTO opinionDTO) {
         try {
             // Obtener userId del JWT automáticamente
@@ -188,7 +188,7 @@ public class OpinionRest {
 
     @PUT
     @Path("/{id}")
-    @RolesAllowed({"CLIENTE", "ADMIN"})
+    @RolesAllowed({"CLIENTE", "PROVEEDOR", "ADMIN"})
     public Response update(@PathParam("id") Integer id, OpinionDTO opinionDTO,
                            @Context SecurityContext securityContext) {
         try {
@@ -236,7 +236,7 @@ public class OpinionRest {
 
     @DELETE
     @Path("/{id}")
-    @RolesAllowed({"CLIENTE", "ADMIN"})
+    @RolesAllowed({"CLIENTE", "PROVEEDOR", "ADMIN"})
     public Response delete(@PathParam("id") Integer id, @Context SecurityContext securityContext) {
         try {
             Opinion opinion = opinionRepo.findById(id);
@@ -306,7 +306,7 @@ public class OpinionRest {
 
     @GET
     @Path("/mis-opiniones")
-    @RolesAllowed({"CLIENTE"})
+    @RolesAllowed({"CLIENTE", "PROVEEDOR"})
     public List<OpinionDTO> getMisOpiniones() {
         Integer userId = getUserIdFromJWT();
         var opiniones = opinionRepo.find("usuarioId", userId).list();
@@ -398,7 +398,7 @@ public class OpinionRest {
     // Endpoint simple para crear opinion sin validaciones externas
     @POST
     @Path("/simple")
-    @RolesAllowed({"CLIENTE", "ADMIN"})
+    @RolesAllowed({"CLIENTE", "PROVEEDOR", "ADMIN"})
     public Response createSimple(@Valid OpinionDTO opinionDTO) {
         try {
             Integer userId = getUserIdFromJWT();

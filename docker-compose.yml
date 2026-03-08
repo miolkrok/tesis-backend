@@ -140,19 +140,3 @@ networks:
   microservices-network:
     driver: bridge
 
-
-      #notificaciones:
-      #build: ./app-notificaciones
-      #labels:
-      #- "traefik.enable=true"
-      #- "traefik.http.routers.notificaciones.rule=PathPrefix(`/notificaciones`) || PathPrefix(`/preferencias`)"
-      #- "traefik.http.routers.notificaciones.entrypoints=web"
-      #- "traefik.http.services.notificaciones.loadbalancer.server.port=8075"
-      #container_name: notificaciones-service
-      #expose:
-    #- "8075"
-
-# Ahora puedes acceder a:
-# http://localhost:8888/usuarios/auth/login -> usuarios (sin /usuarios en la petición interna)
-# http://localhost:8888/actividades -> actividades
-# Dashboard Traefik: http://localhost:8080
