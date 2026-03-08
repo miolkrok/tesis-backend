@@ -29,8 +29,6 @@ public class Pago {
 
     private String estado;
 
-    private String comprobante;
-
     private String imagenComprobante;
 
     private LocalDateTime fechaTransaccion;

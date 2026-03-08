@@ -24,11 +24,17 @@ public class PagoDTO {
 
     private String estado;
 
-    private String comprobante;
+    private String imagenComprobante;
 
     private LocalDateTime fechaTransaccion;
 
     private LocalDateTime fechaActualizacion;
 
     private Reembolso reembolso;
+
+    private String actividadTitulo;
+    private Integer cantidadPersonas;
+    private LocalDateTime fechaReserva;
+    private String nombreUsuario;
+    private String emailUsuario;
 }

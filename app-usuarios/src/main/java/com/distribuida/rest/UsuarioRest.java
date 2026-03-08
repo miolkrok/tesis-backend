@@ -4,6 +4,7 @@ import com.distribuida.db.Usuario;
 import com.distribuida.repo.UsuarioRepository;
 import com.distribuida.service.AzureBlobStorageService;
 import io.quarkus.security.Authenticated;
+import jakarta.annotation.security.PermitAll;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -71,6 +72,40 @@ public class UsuarioRest {
                             "details", e.getMessage(),
                             "timestamp", LocalDateTime.now().toString()
                     ))
+                    .build();
+        }
+    }
+
+    @GET
+    @Path("/public/{id}")
+    @PermitAll
+    public Response findByIdPublic(@PathParam("id") Integer id) {
+        try {
+            System.out.println("Buscando usuario público ID: " + id);
+
+            var op = usuarioRepo.findByIdOptional(id);
+            if (op.isEmpty()) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity(Map.of("error", "Usuario no encontrado"))
+                        .build();
+            }
+
+            Usuario usuario = op.get();
+
+            // Crear un DTO solo con campos públicos
+            Map<String, Object> publicUserData = Map.of(
+                    "id", usuario.getId(),
+                    "nombre", usuario.getNombre(),
+                    "apellido", usuario.getApellido(),
+                    "email", usuario.getEmail()
+            );
+
+            return Response.ok(publicUserData).build();
+
+        } catch (Exception e) {
+            System.err.println("Error al buscar usuario público: " + e.getMessage());
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of("error", "Error interno"))
                     .build();
         }
     }

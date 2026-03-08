@@ -76,6 +76,9 @@ public class Actividad {
     @Column(name="coordenada_lng")
     private Double longitud;
 
+    @Column(name="cuenta_bancaria", length = 50)
+    private String cuentaBancaria;
+
     @Column(name="estado_actividad")
     private String estadoActividad = "ACTIVA"; // ACTIVA, PAUSADA, INACTIVA
 
@@ -84,9 +87,6 @@ public class Actividad {
 
     @OneToMany(mappedBy = "actividadServicio", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<ServicioEvento> servicioEvento;
-
-
-
 
 
 }

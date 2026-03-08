@@ -50,6 +50,12 @@ dependencies {
 
     //Jakart Validation
     implementation("jakarta.validation:jakarta.validation-api:3.1.1")
+
+    // Cache con Caffeine
+    implementation("io.quarkus:quarkus-cache")
+
+    // Scheduler
+    implementation("io.quarkus:quarkus-scheduler")
 }
 
 tasks.test {

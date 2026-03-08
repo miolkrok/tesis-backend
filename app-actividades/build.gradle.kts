@@ -59,6 +59,12 @@ dependencies {
     implementation("software.amazon.awssdk:s3:2.20.26")
     implementation("software.amazon.awssdk:netty-nio-client:2.20.26")
 
+    // Cache con Caffeine
+    implementation("io.quarkus:quarkus-cache")
+
+// Scheduler
+    implementation("io.quarkus:quarkus-scheduler")
+
 }
 
 tasks.test {

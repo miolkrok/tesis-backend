@@ -2,6 +2,7 @@ package com.distribuida.clients;
 
 import com.distribuida.config.RestClientConfig;
 import com.distribuida.dtos.ReservaDTO;
+
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import org.eclipse.microprofile.rest.client.annotation.RegisterClientHeaders;
@@ -25,8 +26,7 @@ public interface ReservaRestClient {
 
     @POST
     ReservaDTO create(ReservaDTO reserva);
-
     @GET
-    @Path("/usuario/{usuarioId}")
-    List<ReservaDTO> findByUsuario(@PathParam("usuarioId") Integer usuarioId);
+    @Path("/buscar-por-actividades")
+    List<ReservaDTO> findByActividadIds(@QueryParam("actividadIds") String actividadIds);
 }

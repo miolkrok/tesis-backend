@@ -1,20 +1,16 @@
 package com.distribuida.rest;
 
+import com.distribuida.clients.ActividadRestClient;
 import com.distribuida.clients.ReservaRestClient;
+import com.distribuida.clients.UsuarioRestClient;
 import com.distribuida.db.Pago;
+import com.distribuida.dtos.ActividadDTO;
 import com.distribuida.dtos.PagoDTO;
+import com.distribuida.dtos.ReservaDTO;
+import com.distribuida.dtos.UsuarioDTO;
 import com.distribuida.repo.PagoRepository;
 import com.distribuida.service.AzureBlobStorageService;
-import jakarta.annotation.security.PermitAll;
-import jakarta.annotation.security.RolesAllowed;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
-import jakarta.ws.rs.*;
-import jakarta.ws.rs.core.Context;
-import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.core.SecurityContext;
+
 import org.eclipse.microprofile.jwt.JsonWebToken;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
@@ -22,6 +18,25 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import jakarta.annotation.security.PermitAll;
+import jakarta.annotation.security.RolesAllowed;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.SecurityContext;
 
 @Path("/pagos")
 @Produces(MediaType.APPLICATION_JSON)
@@ -43,7 +58,164 @@ public class PagoRest {
     @Inject
     JsonWebToken jwt;
 
+    @Inject
+    @RestClient
+    ActividadRestClient actividadRestClient;
 
+    @Inject
+    @RestClient
+    UsuarioRestClient usuarioRestClient;
+
+    /**
+     * NUEVO: Obtener todos los pagos de las actividades de un anfitrión
+     */
+    @GET
+    @Path("/anfitrion/{anfitrionId}")
+    @RolesAllowed({"PROVEEDOR", "ADMIN"})
+    public Response getPagosByAnfitrion(
+            @PathParam("anfitrionId") Integer anfitrionId,
+            @Context SecurityContext securityContext,
+            @Context HttpHeaders headers) {
+
+        try {
+            System.out.println("=== getPagosByAnfitrion ===");
+            System.out.println("anfitrionId: " + anfitrionId);
+
+            // 1. Verificar permisos
+            if (!securityContext.isUserInRole("ADMIN")) {
+                Integer userId = getUserIdFromJWT();
+                if (!userId.equals(anfitrionId)) {
+                    return Response.status(Response.Status.FORBIDDEN).build();
+                }
+            }
+
+            String authHeader = headers.getHeaderString("Authorization");
+
+            // 2. Obtener actividades del anfitrión
+            List<ActividadDTO> actividades = actividadRestClient
+                    .findByUsuarioId(authHeader, anfitrionId);
+
+            if (actividades.isEmpty()) {
+                return Response.ok(List.of()).build();
+            }
+
+            // 3. Obtener IDs de actividades
+            List<Integer> actividadIds = actividades.stream()
+                    .map(ActividadDTO::getId)
+                    .collect(Collectors.toList());
+
+            // 4. Obtener reservas de esas actividades
+            String actividadIdsStr = actividadIds.stream()
+                    .map(String::valueOf)
+                    .collect(Collectors.joining(","));
+            List<ReservaDTO> reservas = reservaRestClient.findByActividadIds(actividadIdsStr);
+
+            if (reservas.isEmpty()) {
+                return Response.ok(List.of()).build();
+            }
+
+            // 5. Obtener IDs de reservas
+            List<Integer> reservaIds = reservas.stream()
+                    .map(ReservaDTO::getId)
+                    .collect(Collectors.toList());
+
+            // 6. CONSULTA OPTIMIZADA: traer solo pagos de esas reservas
+            List<Pago> pagos = pagoRepo.find(
+                    "reservaId in ?1", reservaIds
+            ).list();
+
+            System.out.println("Pagos encontrados: " + pagos.size());
+
+            // 7. Convertir a DTOs con información adicional
+            List<PagoDTO> pagosDTO = pagos.stream().map(pago -> {
+                PagoDTO dto = convertToDTO(pago);
+
+                // Encontrar la reserva correspondiente
+                reservas.stream()
+                        .filter(r -> r.getId().equals(pago.getReservaId()))
+                        .findFirst()
+                        .ifPresent(reserva -> {
+                            dto.setCantidadPersonas(reserva.getCantidadPersonas());
+                            dto.setFechaReserva(reserva.getFechaReserva());
+
+                            // Encontrar la actividad correspondiente
+                            actividades.stream()
+                                    .filter(a -> a.getId().equals(reserva.getActividadId()))
+                                    .findFirst()
+                                    .ifPresent(actividad -> {
+                                        dto.setActividadTitulo(actividad.getTitulo());
+                                    });
+
+                            // Obtener información del usuario que hizo la reserva
+                            try {
+                                Map<String, Object> userMap = usuarioRestClient.findByIdPublic(reserva.getUsuarioId());
+                                if (userMap != null) {
+                                    Object nombre = userMap.get("nombre");
+                                    Object apellido = userMap.get("apellido");
+                                    String nombreCompleto = (nombre != null ? nombre.toString() : "") +
+                                            (apellido != null ? " " + apellido.toString() : "");
+                                    dto.setNombreUsuario(nombreCompleto.trim());
+                                    dto.setEmailUsuario(userMap.get("email") != null ? userMap.get("email").toString() : null);
+                                }
+                            } catch (Exception e) {
+                                System.err.println("Error al obtener usuario " + reserva.getUsuarioId() + ": " + e.getMessage());
+                                dto.setNombreUsuario("Usuario #" + reserva.getUsuarioId());
+                            }
+                        });
+
+                return dto;
+            }).collect(Collectors.toList());
+
+            return Response.ok(pagosDTO).build();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Response.serverError()
+                    .entity(Map.of("error", e.getMessage()))
+                    .build();
+        }
+    }
+
+    /**
+     * NUEVO: Obtener pagos de una actividad específica
+     */
+    @GET
+    @Path("/actividad/{actividadId}")
+    @RolesAllowed({"PROVEEDOR", "ADMIN"})
+    public Response getPagosByActividad(
+            @PathParam("actividadId") Integer actividadId,
+            @Context SecurityContext securityContext) {
+
+        try {
+            // Verificar que el usuario sea dueño de la actividad o admin
+            if (!securityContext.isUserInRole("ADMIN")) {
+                var actividad = actividadRestClient.findById(actividadId);
+                if (actividad == null) {
+                    return Response.status(Response.Status.NOT_FOUND).build();
+                }
+
+                Integer userId = getUserIdFromJWT();
+                if (!actividad.getProveedorId().equals(userId)) {
+                    return Response.status(Response.Status.FORBIDDEN)
+                            .entity(Map.of("error", "No tienes permiso"))
+                            .build();
+                }
+            }
+
+            List<Pago> pagos = pagoRepo.findPagosByAnfitrionId(actividadId);
+
+            List<PagoDTO> pagosDTO = pagos.stream()
+                    .map(this::convertToDTO)
+                    .collect(Collectors.toList());
+
+            return Response.ok(pagosDTO).build();
+
+        } catch (Exception e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(Map.of("error", e.getMessage()))
+                    .build();
+        }
+    }
 
     @GET
     @RolesAllowed({"ADMIN"})
@@ -82,7 +254,7 @@ public class PagoRest {
      * ACTUALIZADO: Crear pago con comprobante en S3
      */
     @POST
-    @RolesAllowed({"CLIENTE", "ADMIN"})
+    @RolesAllowed({"CLIENTE","PROVEEDOR", "ADMIN"})
     public Response create(Pago pago) {
         // Validar que exista la reserva
         try {
@@ -110,8 +282,6 @@ public class PagoRest {
             //SUBIR COMPROBANTE A S3 (si se envió)
             if (pago.getImagenComprobante() != null && !pago.getImagenComprobante().isEmpty()) {
                 try {
-                    storageService.validateImage(pago.getImagenComprobante());
-
                     String s3Url = storageService.uploadImageFromBase64(
                             pago.getImagenComprobante(),
                             "comprobantes/" + userId,
@@ -122,9 +292,7 @@ public class PagoRest {
                     System.out.println("Comprobante subido a S3: " + s3Url);
 
                 } catch (IllegalArgumentException e) {
-                    return Response.status(Response.Status.BAD_REQUEST)
-                            .entity(Map.of("error", "Comprobante inválido: " + e.getMessage()))
-                            .build();
+                    System.err.println("Error al subir a S3: " + e.getMessage());
                 }
             }
 
@@ -286,6 +454,7 @@ public class PagoRest {
         }
     }
 
+
     private PagoDTO convertToDTO(Pago pago) {
         PagoDTO dto = new PagoDTO();
         dto.setId(pago.getId());
@@ -298,10 +467,15 @@ public class PagoRest {
         dto.setFechaActualizacion(pago.getFechaActualizacion());
         dto.setReembolso(pago.getReembolso());
 
-        //Agregar URL del comprobante
-        if (pago.getComprobante() != null) {
-            dto.setComprobante(pago.getComprobante());
+        if (pago.getImagenComprobante() != null) {
+            dto.setImagenComprobante(pago.getImagenComprobante());
         }
+
+        dto.setActividadTitulo(null);
+        dto.setCantidadPersonas(0);
+        dto.setFechaReserva(null);
+        dto.setNombreUsuario(null);
+        dto.setEmailUsuario(null);
 
         return dto;
     }

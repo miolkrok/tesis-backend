@@ -21,12 +21,13 @@ public class JwtPropagationHeadersFactory implements ClientHeadersFactory {
         MultivaluedMap<String, String> result = new MultivaluedHashMap<>();
         result.putAll(clientOutgoingHeaders);
 
-        // Propagar el token JWT automáticamente si existe
-        if (jwt != null && jwt.getRawToken() != null && !jwt.getRawToken().isEmpty()) {
-            result.add("Authorization", "Bearer " + jwt.getRawToken());
-            System.out.println("Propagando JWT a microservicio: " + jwt.getClaim("userId"));
-        } else {
-            System.out.println("No hay JWT disponible para propagar");
+        try {
+            if (jwt != null && jwt.getRawToken() != null && !jwt.getRawToken().isEmpty()) {
+                result.add("Authorization", "Bearer " + jwt.getRawToken());
+            }
+        } catch (Exception e) {
+            // Silenciar - estamos en un hilo sin contexto RequestScoped
+            // Los endpoints @PermitAll no necesitan JWT
         }
 
         return result;

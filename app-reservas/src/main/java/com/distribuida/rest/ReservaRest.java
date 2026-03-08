@@ -47,6 +47,40 @@ public class ReservaRest {
     @Inject
     JsonWebToken jwt;
 
+
+    @GET
+    @Path("/buscar-por-actividades")
+    @PermitAll
+    public List<ReservaDTO> findByActividadIds(@QueryParam("actividadIds") String actividadIdsStr) {
+        try {
+            if (actividadIdsStr == null || actividadIdsStr.isEmpty()) {
+                return List.of();
+            }
+
+            // Parsear los IDs separados por coma
+            List<Integer> actividadIds = java.util.Arrays.stream(actividadIdsStr.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .map(Integer::valueOf)
+                    .collect(Collectors.toList());
+
+            if (actividadIds.isEmpty()) {
+                return List.of();
+            }
+
+            // Buscar reservas que pertenezcan a esas actividades
+            var reservas = reservaRepo.find("actividadId in ?1", actividadIds).list();
+
+            return reservas.stream()
+                    .map(this::convertToDTO)
+                    .collect(Collectors.toList());
+
+        } catch (Exception e) {
+            System.err.println("Error en findByActividadIds: " + e.getMessage());
+            return List.of();
+        }
+    }
+
     @GET
     //@RolesAllowed({"ADMIN", "CLIENTE", "PROVEEDOR"})
     @PermitAll

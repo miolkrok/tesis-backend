@@ -79,6 +79,16 @@ public class ActividadRest {
     }
 
     @GET
+    @Path("/usuario/{usuarioId}")
+    @RolesAllowed({"PROVEEDOR", "ADMIN", "CLIENTE"})
+    public List<ActividadDTO> findByUsuarioId(@PathParam("usuarioId") Integer usuarioId) {
+        var actividades = actividadRepo.find("usuarioId", usuarioId).list();
+        return actividades.stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
+
+    @GET
     @Path("/{id}")
     @PermitAll  // Público para permitir ver detalles sin login
     public Response findById(@PathParam("id") Integer id) {
@@ -199,6 +209,7 @@ public class ActividadRest {
             actividad.setFechaFinDisponible(actividadDTO.getFechaFinDisponible());
             actividad.setProvincia(actividadDTO.getProvincia());
             actividad.setCiudad(actividadDTO.getCiudad());
+            actividad.setCuentaBancaria(actividadDTO.getCuentaBancaria());
             actividad.setLatitud(actividadDTO.getLatitud());
             actividad.setLongitud(actividadDTO.getLongitud());
 
@@ -408,6 +419,11 @@ public class ActividadRest {
         if (actividadDTO.getCiudad() != null) {
             obj.setCiudad(actividadDTO.getCiudad());
         }
+
+        if (actividadDTO.getCuentaBancaria() != null) {
+            obj.setCuentaBancaria(actividadDTO.getCuentaBancaria());
+        }
+
         if (actividadDTO.getLatitud() != null) {
             if (actividadDTO.getLatitud() < -90 || actividadDTO.getLatitud() > 90) {
                 throw new BadRequestException("La latitud debe estar entre -90 y 90");
@@ -967,7 +983,7 @@ public class ActividadRest {
             galeriaRepo.persist(nuevaImagen);
 
             return Response.status(Response.Status.CREATED)
-                    .entity(convertGaleriaToDTO(nuevaImagen)).build();
+                    .entity(nuevaImagen).build();
 
         } catch (Exception e) {
             System.err.println("Error al agregar imagen: " + e.getMessage());
@@ -1010,7 +1026,7 @@ public class ActividadRest {
             servicioEventoRepo.persist(nuevoServicio);
 
             return Response.status(Response.Status.CREATED)
-                    .entity(convertServicioEventoToDTO(nuevoServicio)).build();
+                    .entity(nuevoServicio).build();
 
         } catch (Exception e) {
             System.err.println("Error al agregar servicio: " + e.getMessage());
@@ -1163,22 +1179,7 @@ public class ActividadRest {
         dto.setFechaFinDisponible(actividad.getFechaFinDisponible());
         dto.setMinimoPersonas(actividad.getMinimoPersonas());
         dto.setMaximoPersonas(actividad.getMaximoPersonas());
-
-        // Convertir galería usando el método local
-        if (actividad.getGaleria() != null) {
-            List<GaleriaDTO> galeriaDTO = actividad.getGaleria().stream()
-                    .map(this::convertGaleriaToDTO)
-                    .collect(Collectors.toList());
-            dto.setGaleria(galeriaDTO);
-        }
-
-        // Convertir servicios evento (mantener código existente)
-        if (actividad.getServicioEvento() != null) {
-            List<ServicioEventoDTO> serviciosDTO = actividad.getServicioEvento().stream()
-                    .map(this::convertServicioEventoToDTO)
-                    .collect(Collectors.toList());
-            dto.setServicioEvento(serviciosDTO);
-        }
+        dto.setCuentaBancaria(actividad.getCuentaBancaria());
 
         return dto;
     }
@@ -1203,30 +1204,6 @@ public class ActividadRest {
 
         return dto;
     }
-
-    // Método auxiliar para convertir Galeria a GaleriaDTO
-    private GaleriaDTO convertGaleriaToDTO(Galeria galeria) {
-        GaleriaDTO dto = new GaleriaDTO();
-        dto.setId(galeria.getId());
-        dto.setUrlFoto(galeria.getUrlFoto());
-        dto.setActividadId(galeria.getActividad() != null ? galeria.getActividad().getId() : null);
-        dto.setNombreArchivo(galeria.getNombreArchivo());
-        dto.setTipoContenido(galeria.getTipoContenido());
-        dto.setTamanoArchivo(galeria.getTamanoArchivo());
-        dto.setEsImagenPrincipal(galeria.getEsImagenPrincipal());
-
-        return dto;
-    }
-
-    // Método auxiliar para convertir ServicioEvento a ServicioEventoDTO
-    private ServicioEventoDTO convertServicioEventoToDTO(ServicioEvento servicioEvento) {
-        ServicioEventoDTO dto = new ServicioEventoDTO();
-        dto.setId(servicioEvento.getId());
-        dto.setListaServicio(servicioEvento.getListaServicio());
-        dto.setActividadId(servicioEvento.getActividadServicio().getId());
-        return dto;
-    }
-
 
 }
 
