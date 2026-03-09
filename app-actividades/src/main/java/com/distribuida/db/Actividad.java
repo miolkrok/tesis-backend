@@ -76,7 +76,7 @@ public class Actividad {
     @Column(name="coordenada_lng")
     private Double longitud;
 
-    @Column(name="cuenta_bancaria", length = 50)
+    @Column(name="cuenta_bancaria")
     private String cuentaBancaria;
 
     @Column(name="estado_actividad")

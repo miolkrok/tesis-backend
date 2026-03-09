@@ -318,7 +318,7 @@ public class PagoRest {
      */
     @PUT
     @Path("/{id}")
-    @RolesAllowed({"ADMIN", "CLIENTE"})
+    @RolesAllowed({"ADMIN", "CLIENTE", "PROVEEDOR"})
     public Response update(@PathParam("id") Integer id, Pago pago, @Context SecurityContext securityContext) {
         try {
             Pago obj = pagoRepo.findById(id);
@@ -346,7 +346,22 @@ public class PagoRest {
                 obj.setMetodoPago(pago.getMetodoPago());
             }
             if (pago.getEstado() != null) {
-                obj.setEstado(pago.getEstado());
+                String nuevoEstado = pago.getEstado();
+                obj.setEstado(nuevoEstado);
+
+                // Si se rechaza el pago, cancelar la reserva asociada
+                if ("RECHAZADO".equalsIgnoreCase(nuevoEstado)) {
+                    try {
+                        ReservaDTO reserva = reservaRestClient.findById(obj.getReservaId());
+                        if (reserva != null) {
+                            reserva.setEstado("CANCELADA");
+                            reservaRestClient.update(obj.getReservaId(), reserva);
+                            System.out.println("Reserva " + obj.getReservaId() + " cancelada por pago rechazado");
+                        }
+                    } catch (Exception e) {
+                        System.err.println("Error al cancelar reserva: " + e.getMessage());
+                    }
+                }
             }
 
             // ACTUALIZAR COMPROBANTE EN S3 (si se envió uno nuevo)
@@ -453,7 +468,6 @@ public class PagoRest {
             throw new RuntimeException("Token JWT inválido");
         }
     }
-
 
     private PagoDTO convertToDTO(Pago pago) {
         PagoDTO dto = new PagoDTO();

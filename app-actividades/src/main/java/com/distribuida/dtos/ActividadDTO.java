@@ -72,6 +72,12 @@ public class ActividadDTO {
 
     private LocalDateTime fechaActualizacion;
 
+    // Información del usuario (para mostrar en UI)
+    private String nombreUsuario;
+    private String apellidoUsuario;
+    private String emailUsuario;
+    private String fechaRegistroUsuario;
+
     private List<GaleriaDTO> galeria;
 
     private List<ServicioEventoDTO> servicioEvento;

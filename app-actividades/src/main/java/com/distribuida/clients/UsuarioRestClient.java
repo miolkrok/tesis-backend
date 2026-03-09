@@ -9,6 +9,7 @@ import org.eclipse.microprofile.rest.client.annotation.RegisterClientHeaders;
 import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
 
 import java.util.List;
+import java.util.Map;
 
 @Path("/usuarios")
 @Produces(MediaType.APPLICATION_JSON)
@@ -22,4 +23,8 @@ public interface UsuarioRestClient {
 
     @GET
     List<UsuarioDTO> findAll();
+
+    @GET
+    @Path("/public/{id}")
+    Map<String, Object> findByIdPublic(@PathParam("id") Integer id);
 }

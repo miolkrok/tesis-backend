@@ -98,6 +98,13 @@ public class ActividadRest {
         }
 
         Actividad actividad = op.get();
+// Forzar carga de relaciones LAZY
+        if (actividad.getGaleria() != null) {
+            actividad.getGaleria().size();
+        }
+        if (actividad.getServicioEvento() != null) {
+            actividad.getServicioEvento().size();
+        }
         try {
             ActividadDTO dto = convertToDTO(actividad);
             return Response.ok(dto).build();
@@ -107,6 +114,36 @@ public class ActividadRest {
             return Response.ok(dto).build();
         }
     }
+    /*@GET
+    @Path("/{id}")
+    @PermitAll
+    public Response findById(@PathParam("id") Integer id) {
+        var op = actividadRepo.findByIdOptional(id);
+        if (op.isEmpty()) {
+            return Response.status(Response.Status.NOT_FOUND).build();
+        }
+
+        Actividad actividad = op.get();
+
+        // Cargar galería manualmente
+        List<Galeria> galeriaList = galeriaRepo.find("actividad.id", id).list();
+        actividad.setGaleria(galeriaList);
+
+        // Cargar servicios manualmente
+        List<ServicioEvento> servicioList = servicioEventoRepo.find("actividadServicio.id", id).list();
+        actividad.setServicioEvento(servicioList);
+
+        System.out.println("Actividad " + id + " - Galería: " + galeriaList.size() + " imgs, Servicios: " + servicioList.size());
+
+        try {
+            ActividadDTO dto = convertToDTO(actividad);
+            return Response.ok(dto).build();
+        } catch (Exception e) {
+            System.err.println("Error al obtener información del usuario/proveedor: " + e.getMessage());
+            ActividadDTO dto = convertToDTOBasic(actividad);
+            return Response.ok(dto).build();
+        }
+    }*/
 
     /*@POST
     @PermitAll
@@ -1181,6 +1218,50 @@ public class ActividadRest {
         dto.setMaximoPersonas(actividad.getMaximoPersonas());
         dto.setCuentaBancaria(actividad.getCuentaBancaria());
 
+        // Convertir galería
+        if (actividad.getGaleria() != null && !actividad.getGaleria().isEmpty()) {
+            List<GaleriaDTO> galeriaDTO = actividad.getGaleria().stream()
+                    .map(g -> {
+                        GaleriaDTO gDto = new GaleriaDTO();
+                        gDto.setId(g.getId());
+                        gDto.setUrlFoto(g.getUrlFoto());
+                        gDto.setNombreArchivo(g.getNombreArchivo());
+                        gDto.setTipoContenido(g.getTipoContenido());
+                        gDto.setTamanoArchivo(g.getTamanoArchivo());
+                        gDto.setEsImagenPrincipal(g.getEsImagenPrincipal());
+                        gDto.setActividadId(actividad.getId());
+                        return gDto;
+                    })
+                    .collect(Collectors.toList());
+            dto.setGaleria(galeriaDTO);
+        }
+
+        // Convertir servicios
+        if (actividad.getServicioEvento() != null && !actividad.getServicioEvento().isEmpty()) {
+            List<ServicioEventoDTO> serviciosDTO = actividad.getServicioEvento().stream()
+                    .map(s -> {
+                        ServicioEventoDTO sDto = new ServicioEventoDTO();
+                        sDto.setId(s.getId());
+                        sDto.setListaServicio(s.getListaServicio());
+                        sDto.setActividadId(actividad.getId());
+                        return sDto;
+                    })
+                    .collect(Collectors.toList());
+            dto.setServicioEvento(serviciosDTO);
+        }
+
+        // OBTENER INFORMACIÓN DEL USUARIO/ANFITRIÓN
+        try {
+            Map<String, Object> userMap = usuarioRestClient.findByIdPublic(actividad.getUsuarioId());
+            if (userMap != null) {
+                dto.setNombreUsuario(userMap.get("nombre") != null ? userMap.get("nombre").toString() : null);
+                dto.setApellidoUsuario(userMap.get("apellido") != null ? userMap.get("apellido").toString() : null);
+                dto.setEmailUsuario(userMap.get("email") != null ? userMap.get("email").toString() : null);
+            }
+        } catch (Exception e) {
+            System.err.println("Error al obtener info del usuario para actividad " +
+                    actividad.getId() + ": " + e.getMessage());
+        }
         return dto;
     }
 

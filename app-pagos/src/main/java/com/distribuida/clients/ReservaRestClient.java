@@ -29,4 +29,8 @@ public interface ReservaRestClient {
     @GET
     @Path("/buscar-por-actividades")
     List<ReservaDTO> findByActividadIds(@QueryParam("actividadIds") String actividadIds);
+
+    @PUT
+    @Path("/{id}")
+    ReservaDTO update(@PathParam("id") Integer id, ReservaDTO reserva);
 }
