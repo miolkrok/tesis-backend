@@ -112,6 +112,7 @@ services:
       # Configurar URLs de servicios internos de Docker
       - QUARKUS_REST_CLIENT_ACTIVIDADRESTCLIENT_URL=http://actividades-service:8090
       - QUARKUS_REST_CLIENT_USUARIORESTCLIENT_URL=http://usuarios-service:8080
+      - QUARKUS_REST_CLIENT_PAGORESTCLIENT_URL=http://pagos-service:9090
     depends_on:
       - usuarios
       - actividades
