@@ -318,22 +318,12 @@ public class PagoRest {
      */
     @PUT
     @Path("/{id}")
-    @RolesAllowed({"ADMIN", "CLIENTE", "PROVEEDOR"})
+    @RolesAllowed({"ADMIN", "PROVEEDOR"})
     public Response update(@PathParam("id") Integer id, Pago pago, @Context SecurityContext securityContext) {
         try {
             Pago obj = pagoRepo.findById(id);
             if (obj == null) {
                 return Response.status(Response.Status.NOT_FOUND).build();
-            }
-
-            // Verificar permisos
-            if (!securityContext.isUserInRole("ADMIN")) {
-                Integer userId = getUserIdFromJWT();
-                if (!obj.getUsuarioId().equals(userId)) {
-                    return Response.status(Response.Status.FORBIDDEN)
-                            .entity(Map.of("error", "No tienes permiso"))
-                            .build();
-                }
             }
 
             String oldComprobanteUrl = obj.getImagenComprobante();
@@ -352,12 +342,7 @@ public class PagoRest {
                 // Si se rechaza el pago, cancelar la reserva asociada
                 if ("RECHAZADO".equalsIgnoreCase(nuevoEstado)) {
                     try {
-                        ReservaDTO reserva = reservaRestClient.findById(obj.getReservaId());
-                        if (reserva != null) {
-                            reserva.setEstado("CANCELADA");
-                            reservaRestClient.update(obj.getReservaId(), reserva);
-                            System.out.println("Reserva " + obj.getReservaId() + " cancelada por pago rechazado");
-                        }
+                        System.out.println("Pago " + id + " rechazado");
                     } catch (Exception e) {
                         System.err.println("Error al cancelar reserva: " + e.getMessage());
                     }
@@ -444,6 +429,7 @@ public class PagoRest {
 
     @GET
     @Path("/reserva/{reservaId}")
+    @PermitAll
     public List<PagoDTO> findByReserva(@PathParam("reservaId") Integer reservaId) {
         var transacciones = pagoRepo.find("reservaId", reservaId).list();
         return transacciones.stream()

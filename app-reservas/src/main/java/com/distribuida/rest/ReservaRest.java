@@ -1,8 +1,10 @@
 package com.distribuida.rest;
 
 import com.distribuida.clients.ActividadRestClient;
+import com.distribuida.clients.PagoRestClient;
 import com.distribuida.clients.UsuarioRestClient;
 import com.distribuida.db.Reserva;
+import com.distribuida.dtos.PagoDTO;
 import com.distribuida.dtos.ReservaDTO;
 import com.distribuida.repo.ReservaRepository;
 import io.quarkus.security.Authenticated;
@@ -46,6 +48,10 @@ public class ReservaRest {
 
     @Inject
     JsonWebToken jwt;
+
+    @Inject
+    @RestClient
+    PagoRestClient pagoRestClient;
 
 
     @GET
@@ -170,7 +176,7 @@ public class ReservaRest {
                 int maxPeople = 20; // Valor por defecto
                 try {
                     var actividad = actividadRestClient.findById(reservaDTO.getActividadId());
-                    maxPeople = actividad.getMaxPersonas();
+                    maxPeople = actividad.getMaximoPersonas();
                     System.out.println("Capacidad máxima de actividad: " + maxPeople);
                 } catch (Exception e) {
                     System.err.println("No se pudo obtener capacidad máxima, usando valor por defecto: " + maxPeople);
@@ -497,7 +503,7 @@ public class ReservaRest {
             int maxPeople = 20;
             try {
                 var actividad = actividadRestClient.findById(actividadId);
-                maxPeople = actividad.getMaxPersonas();
+                maxPeople = actividad.getMaximoPersonas();
             } catch (Exception e) {
                 System.err.println("No se pudo obtener capacidad máxima: " + e.getMessage());
             }
@@ -548,6 +554,20 @@ public class ReservaRest {
         dto.setActividadId(reserva.getActividadId());
         dto.setUsuarioId(reserva.getUsuarioId());
         dto.setEstado(reserva.getEstado());
+
+        try {
+            // Buscar el pago por reservaId
+            List<PagoDTO> pagos = pagoRestClient.findByReserva(reserva.getId());
+            if (pagos != null && !pagos.isEmpty()) {
+                dto.setEstadoPago(pagos.get(0).getEstado());
+            } else {
+                dto.setEstadoPago("PENDIENTE"); // Si no hay pago, está pendiente
+            }
+        } catch (Exception e) {
+            System.err.println("Error al obtener pago para reserva " + reserva.getId() + ": " + e.getMessage());
+            dto.setEstadoPago("PENDIENTE");
+        }
+
         dto.setFechaReserva(reserva.getFechaReserva());
         dto.setFechaActividad(reserva.getFechaActividad());
         dto.setCantidadPersonas(reserva.getCantidadPersonas());

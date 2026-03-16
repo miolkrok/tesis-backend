@@ -24,4 +24,5 @@ public class ReservaDTO {
     private LocalDateTime fechaCreacion;
     private LocalDateTime fechaActualizacion;
     private List<HistorialReserva> historialReserva;
+    private String estadoPago;
 }
